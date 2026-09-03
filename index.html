@@ -522,8 +522,12 @@
         }
         addMessage('assistant', data.reply);
       } catch (error) {
-        addMessage('assistant', 'エラー: ' + error.message);
-      } finally {
+  const message = /quota|rate.?limit|429/i.test(error.message)
+    ? '本日のAI利用上限に達しました。時間をおいて、もう一度お試しください。'
+    : 'エラーが発生しました。しばらくしてから、もう一度お試しください。';
+
+  addMessage('assistant', message);
+} finally {
         resizeInput();
       }
     });
