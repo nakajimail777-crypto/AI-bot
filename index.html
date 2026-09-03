@@ -160,13 +160,17 @@
     .main {
       position: relative;
       display: flex;
+      height: 100dvh;
       min-width: 0;
+      min-height: 0;
       flex-direction: column;
+      overflow: hidden;
       background: var(--panel);
     }
 
     .topbar {
       display: flex;
+      flex: 0 0 auto;
       align-items: center;
       min-height: 58px;
       padding: 0 18px;
@@ -195,13 +199,15 @@
       flex: 1;
       min-height: 0;
       overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
       scroll-behavior: smooth;
     }
 
     .messages {
       width: min(100% - 32px, 760px);
       margin: 0 auto;
-      padding: 42px 0 180px;
+      padding: 42px 0 32px;
     }
 
     .welcome {
@@ -268,12 +274,12 @@
     }
 
     .composer-wrap {
-      position: absolute;
-      right: 0;
-      bottom: 0;
-      left: 0;
-      padding: 34px 18px 12px;
-      background: linear-gradient(180deg, rgba(33,33,33,0), var(--panel) 28%);
+      position: relative;
+      z-index: 5;
+      flex: 0 0 auto;
+      padding: 10px 18px 12px;
+      background: var(--panel);
+      box-shadow: 0 -18px 28px rgba(33,33,33,.92);
     }
 
     .composer {
@@ -370,7 +376,7 @@
       .scrim.show { display: block; }
       .topbar { padding: 0 10px; }
       .messages { width: min(100% - 26px, 760px); padding-top: 24px; }
-      .composer-wrap { padding-right: 10px; padding-left: 10px; }
+      .composer-wrap { padding: 8px 10px 10px; }
       .bubble { max-width: 88%; }
     }
 
@@ -494,7 +500,7 @@
       }
     });
 
-    form.addEventListener('submit', async(event) => {
+    form.addEventListener('submit', (event) => {
       event.preventDefault();
       const text = input.value.trim();
       if (!text) return;
@@ -502,28 +508,9 @@
       addMessage('user', text);
       input.value = '';
       resizeInput();
-      try {
-  const response = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      message: text,
-    }),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || "エラーが発生しました");
-  }
-
-  addMessage("assistant", data.reply);
-
-} catch (err) {
-  addMessage("assistant", "エラー: " + err.message);
-}
+      window.setTimeout(() => {
+        addMessage('assistant', 'これは画面確認用のデモ応答です。Gemini APIを接続すると、ここにAIからの返答が表示されます。');
+      }, 450);
     });
 
     document.getElementById('newChat').addEventListener('click', () => {
