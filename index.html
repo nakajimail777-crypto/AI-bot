@@ -502,9 +502,28 @@
       addMessage('user', text);
       input.value = '';
       resizeInput();
-      window.setTimeout(() => {
-        addMessage('assistant', 'これは画面確認用のデモ応答です。Gemini APIを接続すると、ここにAIからの返答が表示されます。');
-      }, 450);
+      try {
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message: text,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "エラーが発生しました");
+  }
+
+  addMessage("assistant", data.reply);
+
+} catch (err) {
+  addMessage("assistant", "エラー: " + err.message);
+}
     });
 
     document.getElementById('newChat').addEventListener('click', () => {
