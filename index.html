@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="既存ホームページの隣で使える、独立したAIチャット画面のデモです。">
+  <title>AI Chat</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --canvas: #171717;
+      --sidebar: #0d0d0d;
+      --panel: #212121;
+      --panel-hover: #2a2a2a;
+      --line: rgba(255, 255, 255, .10);
+      --text: #ececec;
+      --muted: #a7a7a7;
+      --accent: #fff;
+      --accent-text: #111;
+      --sidebar-w: 260px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--canvas);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, textarea { font: inherit; }
+    button { color: inherit; }
+
+    .app {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+      height: 100dvh;
+    }
+
+    .sidebar {
+      position: relative;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--sidebar);
+      border-right: 1px solid rgba(255,255,255,.045);
+    }
+
+    .sidebar-top {
+      display: flex;
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .new-chat, .icon-button, .history-item, .profile, .send-button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    .new-chat {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+      padding: 0 12px;
+      background: transparent;
+      border-radius: 10px;
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .new-chat:hover, .icon-button:hover, .profile:hover { background: var(--panel-hover); }
+
+    .brand-mark {
+      display: grid;
+      width: 27px;
+      height: 27px;
+      place-items: center;
+      border-radius: 50%;
+      background: #fff;
+      color: #111;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .icon-button {
+      display: grid;
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
+      place-items: center;
+      background: transparent;
+      border-radius: 10px;
+    }
+
+    .history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .history-label {
+      margin: 16px 10px 7px;
+      color: #8f8f8f;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .history-item {
+      display: block;
+      width: 100%;
+      padding: 10px 12px;
+      overflow: hidden;
+      background: transparent;
+      border-radius: 8px;
+      color: #dedede;
+      font-size: 14px;
+      text-align: left;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .history-item:hover, .history-item.active { background: var(--panel-hover); }
+
+    .profile {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 8px;
+      padding: 10px;
+      background: transparent;
+      border-radius: 10px;
+      text-align: left;
+    }
+
+    .avatar {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      flex: 0 0 auto;
+      place-items: center;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #7659d8, #47a98c);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .profile-copy { min-width: 0; }
+    .profile-name, .profile-plan { display: block; }
+    .profile-name { font-size: 14px; font-weight: 600; }
+    .profile-plan { margin-top: 2px; color: var(--muted); font-size: 12px; }
+
+    .main {
+      position: relative;
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      background: var(--panel);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      min-height: 58px;
+      padding: 0 18px;
+      border-bottom: 1px solid transparent;
+    }
+
+    .model-button {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 10px;
+      background: transparent;
+      border: 0;
+      border-radius: 9px;
+      color: #e8e8e8;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .model-button:hover { background: var(--panel-hover); }
+    .model-sub { color: #aaa; font-weight: 500; }
+    .mobile-menu { display: none; margin-right: 4px; }
+
+    .conversation {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+
+    .messages {
+      width: min(100% - 32px, 760px);
+      margin: 0 auto;
+      padding: 42px 0 180px;
+    }
+
+    .welcome {
+      display: flex;
+      min-height: calc(100dvh - 300px);
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .welcome-inner { transform: translateY(-3vh); }
+
+    .welcome-icon {
+      display: grid;
+      width: 44px;
+      height: 44px;
+      margin: 0 auto 20px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: #292929;
+      font-size: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(25px, 3vw, 32px);
+      font-weight: 650;
+      letter-spacing: -.03em;
+    }
+
+    .welcome p { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
+
+    .message-row { margin: 0 0 30px; }
+
+    .message-row.user { display: flex; justify-content: flex-end; }
+
+    .bubble {
+      max-width: min(78%, 620px);
+      padding: 11px 17px;
+      border-radius: 20px;
+      background: #303030;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .assistant-message {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 14px;
+      line-height: 1.75;
+    }
+
+    .assistant-badge {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .composer-wrap {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      padding: 34px 18px 12px;
+      background: linear-gradient(180deg, rgba(33,33,33,0), var(--panel) 28%);
+    }
+
+    .composer {
+      width: min(100%, 760px);
+      margin: 0 auto;
+      padding: 10px 10px 10px 17px;
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background: #2f2f2f;
+      box-shadow: 0 10px 28px rgba(0,0,0,.18);
+    }
+
+    textarea {
+      display: block;
+      width: 100%;
+      max-height: 160px;
+      min-height: 28px;
+      resize: none;
+      overflow-y: auto;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      line-height: 1.55;
+    }
+
+    textarea::placeholder { color: #a6a6a6; }
+
+    .composer-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+
+    .attach-button {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: #cfcfcf;
+      cursor: pointer;
+    }
+
+    .attach-button:hover { background: #3b3b3b; }
+
+    .send-button {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--accent);
+      color: var(--accent-text);
+      transition: opacity .16s ease, transform .16s ease;
+    }
+
+    .send-button:disabled { cursor: default; opacity: .28; }
+    .send-button:not(:disabled):hover { transform: scale(1.04); }
+
+    .notice {
+      margin: 9px auto 0;
+      color: #999;
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .scrim { display: none; }
+
+    @media (max-width: 760px) {
+      .app { display: block; }
+      .sidebar {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: min(88vw, 300px);
+        transform: translateX(-102%);
+        transition: transform .22s ease;
+        box-shadow: 18px 0 45px rgba(0,0,0,.35);
+      }
+      .sidebar.open { transform: translateX(0); }
+      .main { height: 100dvh; }
+      .mobile-menu { display: grid; }
+      .scrim {
+        position: fixed;
+        z-index: 15;
+        inset: 0;
+        background: rgba(0,0,0,.55);
+      }
+      .scrim.show { display: block; }
+      .topbar { padding: 0 10px; }
+      .messages { width: min(100% - 26px, 760px); padding-top: 24px; }
+      .composer-wrap { padding-right: 10px; padding-left: 10px; }
+      .bubble { max-width: 88%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar" aria-label="チャット履歴">
+      <div class="sidebar-top">
+        <button class="new-chat" id="newChat" type="button">
+          <span class="brand-mark">✦</span>
+          <span>新しいチャット</span>
+        </button>
+        <button class="icon-button" id="closeSidebar" type="button" aria-label="履歴を閉じる">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+      </div>
+      <nav class="history" aria-label="過去の会話">
+        <div class="history-label">今日</div>
+        <button class="history-item active" type="button">新しい会話</button>
+        <button class="history-item" type="button">ホームページのアイデア</button>
+        <div class="history-label">過去7日間</div>
+        <button class="history-item" type="button">文章のまとめ方</button>
+        <button class="history-item" type="button">旅行プランの相談</button>
+      </nav>
+      <button class="profile" type="button">
+        <span class="avatar">U</span>
+        <span class="profile-copy">
+          <span class="profile-name">ユーザー</span>
+          <span class="profile-plan">ローカルデモ</span>
+        </span>
+      </button>
+    </aside>
+
+    <div class="scrim" id="scrim"></div>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-button mobile-menu" id="openSidebar" type="button" aria-label="履歴を開く">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <button class="model-button" type="button" aria-label="使用モデル">
+          <span>AI Chat</span><span class="model-sub">Demo</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </header>
+
+      <section class="conversation" id="conversation" aria-live="polite">
+        <div class="messages" id="messages">
+          <div class="welcome" id="welcome">
+            <div class="welcome-inner">
+              <div class="welcome-icon">✦</div>
+              <h1>今日は何をお手伝いしましょうか？</h1>
+              <p>メッセージを入力すると、画面上で会話の流れを確認できます。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="composer-wrap">
+        <form class="composer" id="composer">
+          <textarea id="messageInput" rows="1" placeholder="メッセージを入力" aria-label="メッセージ"></textarea>
+          <div class="composer-actions">
+            <button class="attach-button" type="button" aria-label="ファイルを添付（デモ）">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <button class="send-button" id="sendButton" type="submit" disabled aria-label="送信">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 12 6-6 6 6M12 6v12"/></svg>
+            </button>
+          </div>
+        </form>
+        <p class="notice">現在は画面デモです。AI APIには接続していません。</p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const form = document.getElementById('composer');
+    const input = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+    const messages = document.getElementById('messages');
+    const conversation = document.getElementById('conversation');
+    const sidebar = document.getElementById('sidebar');
+    const scrim = document.getElementById('scrim');
+
+    function resizeInput() {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+      sendButton.disabled = !input.value.trim();
+    }
+
+    function toggleSidebar(open) {
+      sidebar.classList.toggle('open', open);
+      scrim.classList.toggle('show', open);
+    }
+
+    function addMessage(type, text) {
+      const row = document.createElement('div');
+      row.className = 'message-row ' + type;
+      if (type === 'user') {
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.textContent = text;
+        row.appendChild(bubble);
+      } else {
+        row.innerHTML = '<div class="assistant-message"><div class="assistant-badge">✦</div><div></div></div>';
+        row.querySelector('.assistant-message div:last-child').textContent = text;
+      }
+      messages.appendChild(row);
+      conversation.scrollTop = conversation.scrollHeight;
+    }
+
+    input.addEventListener('input', resizeInput);
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      document.getElementById('welcome')?.remove();
+      addMessage('user', text);
+      input.value = '';
+      resizeInput();
+      window.setTimeout(() => {
+        addMessage('assistant', 'これは画面確認用のデモ応答です。Gemini APIを接続すると、ここにAIからの返答が表示されます。');
+      }, 450);
+    });
+
+    document.getElementById('newChat').addEventListener('click', () => {
+      messages.innerHTML = '<div class="welcome" id="welcome"><div class="welcome-inner"><div class="welcome-icon">✦</div><h1>今日は何をお手伝いしましょうか？</h1><p>メッセージを入力すると、画面上で会話の流れを確認できます。</p></div></div>';
+      input.focus();
+      toggleSidebar(false);
+    });
+    document.getElementById('openSidebar').addEventListener('click', () => toggleSidebar(true));
+    document.getElementById('closeSidebar').addEventListener('click', () => toggleSidebar(false));
+    scrim.addEventListener('click', () => toggleSidebar(false));
+  </script>
+</body>
+</html>
