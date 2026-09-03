@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="既存ホームページの隣で使える、独立したAIチャット画面のデモです。">
-  <title>AI Chat</title>
+  <title>スピリットドラゴンAI</title>
   <style>
     :root {
       color-scheme: dark;
@@ -422,7 +422,7 @@
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
         <button class="model-button" type="button" aria-label="使用モデル">
-          <span>AI Chat</span><span class="model-sub">Demo</span>
+          <span>スピリットドラゴンAI</span><span class="model-sub">デモ</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
         </button>
       </header>
@@ -432,7 +432,7 @@
           <div class="welcome" id="welcome">
             <div class="welcome-inner">
               <div class="welcome-icon">✦</div>
-              <h1>今日は何をお手伝いしましょうか？</h1>
+              <h1>心の声を、スピリットドラゴンに聞かせてください。</h1>
               <p>メッセージを入力すると、画面上で会話の流れを確認できます。</p>
             </div>
           </div>
@@ -451,7 +451,7 @@
             </button>
           </div>
         </form>
-        <p class="notice">現在は画面デモです。AI APIには接続していません。</p>
+        <p class="notice">回答はAIによって生成されます。重要な内容は確認してください。</p>
       </div>
     </main>
   </div>
@@ -500,7 +500,7 @@
       }
     });
 
-    form.addEventListener('submit', (event) => {
+    form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const text = input.value.trim();
       if (!text) return;
@@ -508,13 +508,28 @@
       addMessage('user', text);
       input.value = '';
       resizeInput();
-      window.setTimeout(() => {
-        addMessage('assistant', 'これは画面確認用のデモ応答です。Gemini APIを接続すると、ここにAIからの返答が表示されます。');
-      }, 450);
+      sendButton.disabled = true;
+
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'エラーが発生しました');
+        }
+        addMessage('assistant', data.reply);
+      } catch (error) {
+        addMessage('assistant', 'エラー: ' + error.message);
+      } finally {
+        resizeInput();
+      }
     });
 
     document.getElementById('newChat').addEventListener('click', () => {
-      messages.innerHTML = '<div class="welcome" id="welcome"><div class="welcome-inner"><div class="welcome-icon">✦</div><h1>今日は何をお手伝いしましょうか？</h1><p>メッセージを入力すると、画面上で会話の流れを確認できます。</p></div></div>';
+      messages.innerHTML = '<div class="welcome" id="welcome"><div class="welcome-inner"><div class="welcome-icon">✦</div><h1>心の声を、スピリットドラゴンに聞かせてください。</h1><p>メッセージを入力すると、画面上で会話の流れを確認できます。</p></div></div>';
       input.focus();
       toggleSidebar(false);
     });
