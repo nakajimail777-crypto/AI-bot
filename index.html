@@ -494,7 +494,7 @@
       }
     });
 
-    form.addEventListener('submit', (event) => {
+    form.addEventListener('submit', async(event) => {
       event.preventDefault();
       const text = input.value.trim();
       if (!text) return;
