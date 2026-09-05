@@ -14,6 +14,7 @@ function setup(options={}){
   else if(url.includes('/messages?id='))body=options.prior||[];
   else if(url.includes('/messages?reply_to='))body=[{content:'保存済みの回答'}];
   else if(url.includes('chat_reserve_request')){body=null;if(options.rate){status=400;body={message:'CHAT_RATE_LIMIT'};}}
+  else if(url.includes('/ai_personas?'))body=options.personas||[{instructions:'温かく静かに対話し、本人が選べる小さな一歩へつなげてください。'.repeat(3)}];
   else if(url.includes('order=sequence.desc'))body=options.history||[{role:'assistant',content:'前の回答',sequence:2},{role:'user',content:'前の質問',sequence:1}];
   else if(url.includes('googleapis.com')){body={candidates:[{content:{parts:options.parts||[{text:'新しい回答'}]}}]};status=options.geminiStatus||200;}
   else if(url.includes('chat_save_turn')){body={reply:'新しい回答'};if(options.saveError){status=400;body={message:options.saveError};}}
@@ -33,6 +34,7 @@ test('persisted context reaches Gemini in order and JWT is not forwarded',async(
  const s=setup();const res=await s.invoke();assert.equal(res.code,200);assert.equal(res.body.saved,true);
  const model=s.calls.find(c=>c.url.includes('googleapis'));
  assert.deepEqual(JSON.parse(model.init.body).contents.map(x=>x.role),['user','model','user']);
+ assert.match(JSON.parse(model.init.body).systemInstruction.parts[0].text,/温かく静かに対話/);
  assert.equal(model.init.headers.Authorization,undefined);
  const save=s.calls.find(c=>c.url.includes('chat_save_turn'));
  assert.deepEqual(JSON.parse(save.init.body),{p_user_id:user,p_conversation_id:chat,p_request_id:request,p_message:'こんにちは',p_reply:'新しい回答',p_last_sequence:2});
@@ -40,6 +42,7 @@ test('persisted context reaches Gemini in order and JWT is not forwarded',async(
  assert.equal(s.calls.find(c=>c.url.includes('/conversations?')).init.headers.Authorization,'Bearer test-jwt');
 });
 test('idempotent retry returns stored reply without model usage',async()=>{const s=setup({prior:[{role:'user',content:'こんにちは'}]});const res=await s.invoke();assert.equal(res.body.reply,'保存済みの回答');assert.equal(s.calls.length,4);});
+test('missing active persona prevents model usage',async()=>{const s=setup({personas:[]});const res=await s.invoke();assert.equal(res.code,503);assert.ok(!s.calls.some(c=>c.url.includes('googleapis')));});
 test('same request ID with changed text rejected',async()=>{const s=setup({prior:[{role:'user',content:'別の文章'}]});assert.equal((await s.invoke()).code,409);});
 test('rate limit prevents model usage',async()=>{const s=setup({rate:true});assert.equal((await s.invoke()).code,429);assert.ok(!s.calls.some(c=>c.url.includes('googleapis')));});
 test('provider failure never saves a partial turn',async()=>{const s=setup({geminiStatus:429});assert.equal((await s.invoke()).code,429);assert.ok(!s.calls.some(c=>c.url.includes('chat_save_turn')));});

@@ -138,6 +138,14 @@ $('archiveChat').onclick=()=>run(async()=>{
 });
 $('profile').onclick=()=>{if(!session)$('authDialog').showModal();};
 $('closeAuth').onclick=()=>$('authDialog').close();
+$('googleLogin').onclick=async()=>{
+  const button=$('googleLogin');button.disabled=true;$('authStatus').textContent='Googleを開いています…';
+  try{
+    if(!db)throw new Error('ログインの準備ができていません。');
+    const {error}=await db.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/'}});
+    if(error)throw error;
+  }catch{$('authStatus').textContent='Googleログインを開始できませんでした。もう一度お試しください。';button.disabled=false;}
+};
 $('authForm').onsubmit=async event=>{
   event.preventDefault();const button=$('loginSend');button.disabled=true;$('authStatus').textContent='送信しています…';
   try{
