@@ -1,0 +1,18 @@
+button:disabled { cursor: default; opacity: .45; }
+[hidden] { display: none !important; }
+.assistant-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.status { min-height: 1.5em; max-width: 760px; margin: 5px auto; color: #c9c9c9; font-size: 13px; text-align: center; }
+.status.error { color: #ffb4a9; }
+.history-empty { color: var(--muted); padding: 12px; font-size: 13px; line-height: 1.7; }
+.profile-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.plain-button { border: 1px solid var(--line); border-radius: 9px; background: #303030; color: var(--text); padding: 8px 12px; cursor: pointer; font: inherit; }
+.account-actions { display: flex; gap: 8px; margin: 0 12px 12px; }
+.auth-dialog { width: min(440px, calc(100% - 28px)); color: var(--text); background: #242424; border: 1px solid #555; border-radius: 18px; padding: 26px; }
+.auth-dialog::backdrop { background: #0009; }
+.auth-dialog h2 { margin-top: 0; font-size: 22px; }
+.auth-dialog p { line-height: 1.75; color: #bbb; }
+.auth-dialog input { width: 100%; padding: 12px; margin: 10px 0 16px; border: 1px solid #666; border-radius: 8px; color: #eee; background: #171717; font: inherit; }
+.dialog-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.older { display: block; margin: 0 auto 20px; }
+.chat-actions { margin-left: auto; }
+@media(max-width:760px) { .model-button { font-size: 15px; } .chat-actions { font-size: 12px; padding: 7px; } .status { font-size: 12px; } }

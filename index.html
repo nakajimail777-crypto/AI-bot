@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="既存ホームページの隣で使える、独立したAIチャット画面のデモです。">
+  <meta name="description" content="既存ホームページの隣で使える、会話を保存して、続きから話せるAIチャットです。">
   <title>スピリットドラゴンAI</title>
   <style>
     :root {
@@ -384,6 +384,7 @@
       *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
     }
   </style>
+  <link rel="stylesheet" href="/assets/db.css">
 </head>
 <body>
   <div class="app">
@@ -397,21 +398,15 @@
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m15 18-6-6 6-6"/></svg>
         </button>
       </div>
-      <nav class="history" aria-label="過去の会話">
-        <div class="history-label">今日</div>
-        <button class="history-item active" type="button">新しい会話</button>
-        <button class="history-item" type="button">ホームページのアイデア</button>
-        <div class="history-label">過去7日間</div>
-        <button class="history-item" type="button">文章のまとめ方</button>
-        <button class="history-item" type="button">旅行プランの相談</button>
-      </nav>
-      <button class="profile" type="button">
+      <nav class="history" id="history" aria-label="過去の会話"></nav>
+      <button class="profile" id="profile" type="button">
         <span class="avatar">U</span>
         <span class="profile-copy">
-          <span class="profile-name">ユーザー</span>
-          <span class="profile-plan">ローカルデモ</span>
+          <span class="profile-name" id="profileName">ログイン</span>
+          <span class="profile-plan" id="profilePlan">メールでログイン</span>
         </span>
       </button>
+      <div class="account-actions"><button id="logout" class="plain-button" type="button" hidden>ログアウト</button></div>
     </aside>
 
     <div class="scrim" id="scrim"></div>
@@ -422,9 +417,10 @@
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
         <button class="model-button" type="button" aria-label="使用モデル">
-          <span>スピリットドラゴンAI</span><span class="model-sub">デモ</span>
+          <span>スピリットドラゴンAI</span><span class="model-sub"></span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
         </button>
+        <button id="archiveChat" class="plain-button chat-actions" type="button" hidden>会話を非表示</button>
       </header>
 
       <section class="conversation" id="conversation" aria-live="polite">
@@ -441,7 +437,7 @@
 
       <div class="composer-wrap">
         <form class="composer" id="composer">
-          <textarea id="messageInput" rows="1" placeholder="メッセージを入力" aria-label="メッセージ"></textarea>
+          <textarea id="messageInput" rows="1" placeholder="メッセージを入力" aria-label="メッセージ" maxlength="4000" disabled></textarea>
           <div class="composer-actions">
             <button class="attach-button" type="button" aria-label="ファイルを添付（デモ）">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
@@ -451,95 +447,26 @@
             </button>
           </div>
         </form>
+        <p id="status" class="status" role="status"></p>
         <p class="notice">回答はAIによって生成されます。重要な内容は確認してください。</p>
       </div>
     </main>
   </div>
 
-  <script>
-    const form = document.getElementById('composer');
-    const input = document.getElementById('messageInput');
-    const sendButton = document.getElementById('sendButton');
-    const messages = document.getElementById('messages');
-    const conversation = document.getElementById('conversation');
-    const sidebar = document.getElementById('sidebar');
-    const scrim = document.getElementById('scrim');
-
-    function resizeInput() {
-      input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 160) + 'px';
-      sendButton.disabled = !input.value.trim();
-    }
-
-    function toggleSidebar(open) {
-      sidebar.classList.toggle('open', open);
-      scrim.classList.toggle('show', open);
-    }
-
-    function addMessage(type, text) {
-      const row = document.createElement('div');
-      row.className = 'message-row ' + type;
-      if (type === 'user') {
-        const bubble = document.createElement('div');
-        bubble.className = 'bubble';
-        bubble.textContent = text;
-        row.appendChild(bubble);
-      } else {
-        row.innerHTML = '<div class="assistant-message"><div class="assistant-badge">✦</div><div></div></div>';
-        row.querySelector('.assistant-message div:last-child').textContent = text;
-      }
-      messages.appendChild(row);
-      conversation.scrollTop = conversation.scrollHeight;
-    }
-
-    input.addEventListener('input', resizeInput);
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-        event.preventDefault();
-        form.requestSubmit();
-      }
-    });
-
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const text = input.value.trim();
-      if (!text) return;
-      document.getElementById('welcome')?.remove();
-      addMessage('user', text);
-      input.value = '';
-      resizeInput();
-      sendButton.disabled = true;
-
-      try {
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text })
-        });
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error || 'エラーが発生しました');
-        }
-        addMessage('assistant', data.reply);
-      } catch (error) {
-  const message = /quota|rate.?limit|429/i.test(error.message)
-    ? '本日のAI利用上限に達しました。時間をおいて、もう一度お試しください。'
-    : 'エラーが発生しました。しばらくしてから、もう一度お試しください。';
-
-  addMessage('assistant', message);
-} finally {
-        resizeInput();
-      }
-    });
-
-    document.getElementById('newChat').addEventListener('click', () => {
-      messages.innerHTML = '<div class="welcome" id="welcome"><div class="welcome-inner"><div class="welcome-icon">✦</div><h1>心の声を、スピリットドラゴンに聞かせてください。</h1><p>メッセージを入力すると、画面上で会話の流れを確認できます。</p></div></div>';
-      input.focus();
-      toggleSidebar(false);
-    });
-    document.getElementById('openSidebar').addEventListener('click', () => toggleSidebar(true));
-    document.getElementById('closeSidebar').addEventListener('click', () => toggleSidebar(false));
-    scrim.addEventListener('click', () => toggleSidebar(false));
-  </script>
+  <dialog id="authDialog" class="auth-dialog" aria-labelledby="authTitle">
+    <h2 id="authTitle">続きから話せるように</h2>
+    <p>メールでログインすると、会話を保存し、別の端末からも開けます。</p>
+    <form id="authForm">
+      <label for="email">メールアドレス</label>
+      <input id="email" type="email" autocomplete="email" required placeholder="you@example.com">
+      <div class="dialog-actions">
+        <button id="loginSend" class="plain-button" type="submit">ログインリンクを送る</button>
+        <button id="closeAuth" class="plain-button" type="button">閉じる</button>
+      </div>
+      <p id="authStatus" role="status"></p>
+    </form>
+  </dialog>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.js" integrity="sha384-CLZeq1dk8+Uzrs7TVvBUdlFoV5F0DMqgRoeHa8g5wJcuPe5SkVfEvdxB0ZuzlnBQ" crossorigin="anonymous"></script>
+  <script defer src="/assets/app.js"></script>
 </body>
 </html>

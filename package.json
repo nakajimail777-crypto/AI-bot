@@ -1,0 +1,5 @@
+{
+  "name": "spirit-dragon-ai", "private": true, "type": "module",
+  "scripts": { "test": "node --test tests/*.test.js" },
+  "engines": { "node": ">=22" }
+}
