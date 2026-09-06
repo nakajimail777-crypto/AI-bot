@@ -462,12 +462,22 @@
       <button id="manageExportPdf" class="plain-button" type="button">PDFで保存</button>
       <p>会話を手元に残せます。保存しても会話は消えません。</p>
     </div>
+    <div class="management-archive">
+      <button id="showArchivedChats" class="plain-button" type="button">非表示の会話を見る</button>
+      <p>非表示にした会話を確認し、一覧へ戻せます。</p>
+    </div>
     <div class="management-delete">
       <p>保存した会話を削除します。次の画面で件数を確認できます。</p>
       <button id="deleteAllChats" class="plain-button danger" type="button" hidden>すべての会話を削除</button>
     </div>
     <p id="manageStatus" role="status"></p>
     <div class="dialog-actions"><button id="closeManage" class="plain-button" type="button" autofocus>閉じる</button></div>
+  </dialog>
+  <dialog id="archivedDialog" class="auth-dialog" aria-labelledby="archivedTitle">
+    <h2 id="archivedTitle">非表示の会話</h2>
+    <div id="archivedChats" class="archived-chats"></div>
+    <p id="archivedStatus" role="status"></p>
+    <div class="dialog-actions"><button id="closeArchived" class="plain-button" type="button">会話の管理に戻る</button></div>
   </dialog>
   <dialog id="deleteDialog" class="auth-dialog" aria-labelledby="deleteTitle" aria-describedby="deleteDescription">
     <h2 id="deleteTitle">会話を削除しますか？</h2>
