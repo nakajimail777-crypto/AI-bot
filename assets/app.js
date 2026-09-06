@@ -3,6 +3,7 @@ const input = $('messageInput'), send = $('sendButton'), messages = $('messages'
 let db, session = null, activeId = null, busy = false, ready = false, epoch = 0, pending = null, rows = [], chats = [];
 let historyOffset = 0, historyMore = false, olderMore = false;
 let deleteTarget = null;
+let archivedChats = [];
 const storageKey = () => `dragon-draft-${session?.user.id || 'none'}`;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 function toggleSidebar(open) { $('sidebar').classList.toggle('open', open); $('scrim').classList.toggle('show', open); }
@@ -18,6 +19,7 @@ function controls() {
   $('deleteAllChats').disabled = busy || !ready;
   $('manageChats').hidden = !session;
   $('manageChats').disabled = busy || !ready;
+  $('showArchivedChats').disabled = busy || !ready || !session;
   $('logout').disabled = busy;
   document.querySelectorAll('.history-item,.older').forEach(button => button.disabled = busy);
   input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight,160)+'px';
@@ -89,7 +91,7 @@ async function changeSession(next) {
   session=next;
   if(oldId===nextId){controls();return;}
   epoch++;const version=epoch;ready=false;activeId=null;rows=[];chats=[];pending=null;input.value='';historyMore=false;olderMore=false;
-  deleteTarget=null;$('deleteDialog').close();$('manageDialog').close();$('pdfDialog').close();$('pdfPreview').src='about:blank';
+  deleteTarget=null;archivedChats=[];$('deleteDialog').close();$('manageDialog').close();$('archivedDialog').close();$('pdfDialog').close();$('pdfPreview').src='about:blank';
   $('profileName').textContent=session?.user.email||'ログイン'; $('profilePlan').textContent=session?'会話を保存できます':'メールでログイン';$('logout').hidden=!session;
   renderMessages();renderHistory();status('');
   if(!session){ready=true;controls();return;}
@@ -170,6 +172,31 @@ async function openDelete(all) {
 $('deleteChat').onclick=()=>openDelete(false);
 $('manageChats').onclick=()=>{if(!busy && ready && session){$('manageStatus').textContent='';$('manageDialog').showModal();}};
 $('closeManage').onclick=()=>$('manageDialog').close();
+function renderArchivedChats() {
+  const list=$('archivedChats');list.replaceChildren();
+  if(!archivedChats.length){const p=document.createElement('p');p.className='history-empty';p.textContent='非表示の会話はありません。';list.append(p);return;}
+  for(const chat of archivedChats){
+    const row=document.createElement('div');row.className='archived-chat';
+    const title=document.createElement('span');title.className='archived-title';title.textContent=chat.title;
+    const restore=document.createElement('button');restore.className='plain-button';restore.type='button';restore.textContent='再表示';restore.disabled=busy;
+    restore.onclick=()=>run(async()=>{
+      restore.disabled=true;$('archivedStatus').textContent='会話を一覧へ戻しています…';
+      const {error}=await db.from('conversations').update({archived_at:null}).eq('id',chat.id).eq('user_id',session.user.id);
+      if(error)throw new Error('会話を再表示できませんでした。もう一度お試しください。');
+      archivedChats=archivedChats.filter(item=>item.id!==chat.id);renderArchivedChats();await loadHistory();$('archivedStatus').textContent='会話を一覧へ戻しました。';
+    });
+    row.append(title,restore);list.append(row);
+  }
+}
+$('showArchivedChats').onclick=()=>run(async()=>{
+  const version=epoch;$('manageStatus').textContent='非表示の会話を読み込んでいます…';
+  const {data,error}=await db.from('conversations').select('id,title,updated_at,archived_at').eq('user_id',session.user.id).not('archived_at','is',null).order('archived_at',{ascending:false}).limit(100);
+  if(error)throw new Error('非表示の会話を読み込めませんでした。もう一度お試しください。');
+  if(version!==epoch)return;
+  archivedChats=data||[];renderArchivedChats();$('manageStatus').textContent='';$('manageDialog').close();$('archivedDialog').showModal();
+});
+$('closeArchived').onclick=()=>{$('archivedDialog').close();if(session)$('manageDialog').showModal();};
+$('archivedDialog').addEventListener('cancel',()=>{if(session)$('manageDialog').showModal();});
 $('deleteAllChats').onclick=()=>{$('manageDialog').close();openDelete(true);};
 $('cancelDelete').onclick=()=>{$('deleteDialog').close();deleteTarget=null;};
 function exportConversationsPdf(fromManagement=false){return run(async()=>{
