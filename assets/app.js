@@ -21,7 +21,7 @@ function controls() {
   $('manageChats').disabled = busy || !ready;
   $('showArchivedChats').disabled = busy || !ready || !session;
   $('logout').disabled = busy;
-  document.querySelectorAll('.history-item,.older').forEach(button => button.disabled = busy);
+  document.querySelectorAll('.history-item,.older,.archived-chat .plain-button').forEach(button => button.disabled = busy);
   input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight,160)+'px';
 }
 function rememberDraft() {
