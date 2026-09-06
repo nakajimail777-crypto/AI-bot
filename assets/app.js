@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id);
 const input = $('messageInput'), send = $('sendButton'), messages = $('messages');
 let db, session = null, activeId = null, busy = false, ready = false, epoch = 0, pending = null, rows = [], chats = [];
 let historyOffset = 0, historyMore = false, olderMore = false;
+let deleteTarget = null;
 const storageKey = () => `dragon-draft-${session?.user.id || 'none'}`;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 function toggleSidebar(open) { $('sidebar').classList.toggle('open', open); $('scrim').classList.toggle('show', open); }
@@ -10,6 +11,13 @@ function controls() {
   input.disabled = busy || !ready || !session;
   $('newChat').disabled = busy || !ready || !session;
   $('archiveChat').disabled = busy || !activeId;
+  $('archiveChat').hidden = !activeId;
+  $('deleteChat').hidden = !session || !activeId;
+  $('deleteChat').disabled = busy || !ready;
+  $('deleteAllChats').hidden = !session;
+  $('deleteAllChats').disabled = busy || !ready;
+  $('manageChats').hidden = !session;
+  $('manageChats').disabled = busy || !ready;
   $('logout').disabled = busy;
   document.querySelectorAll('.history-item,.older').forEach(button => button.disabled = busy);
   input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight,160)+'px';
@@ -81,6 +89,7 @@ async function changeSession(next) {
   session=next;
   if(oldId===nextId){controls();return;}
   epoch++;const version=epoch;ready=false;activeId=null;rows=[];chats=[];pending=null;input.value='';historyMore=false;olderMore=false;
+  deleteTarget=null;$('deleteDialog').close();$('manageDialog').close();$('pdfDialog').close();$('pdfPreview').src='about:blank';
   $('profileName').textContent=session?.user.email||'ログイン'; $('profilePlan').textContent=session?'会話を保存できます':'メールでログイン';$('logout').hidden=!session;
   renderMessages();renderHistory();status('');
   if(!session){ready=true;controls();return;}
@@ -137,6 +146,98 @@ $('archiveChat').onclick=()=>run(async()=>{
   activeId=null;rows=[];pending=null;input.value='';olderMore=false;rememberDraft();renderMessages();await loadHistory();status('会話を非表示にしました。');
 });
 $('profile').onclick=()=>{if(!session)$('authDialog').showModal();};
+async function openDelete(all) {
+  if(busy || !ready || !session || (!all && !activeId))return;
+  const target={all,id:activeId,userId:session.user.id,version:epoch,count:null};
+  deleteTarget=target;
+  $('deleteTitle').textContent=all?'すべての会話を削除しますか？':'この会話を削除しますか？';
+  $('deleteDescription').textContent='削除する会話の件数を確認しています…';
+  $('confirmDelete').disabled=true;$('exportPdf').disabled=true;
+  $('deleteStatus').textContent='';$('deleteDialog').showModal();
+  try {
+    let query=db.from('conversations').select('id',{count:'exact',head:true}).eq('user_id',target.userId);
+    if(!all)query=query.eq('id',target.id);
+    const {count,error}=await query;
+    if(deleteTarget!==target || epoch!==target.version)return;
+    if(error || !Number.isInteger(count) || count<0)throw new Error('件数を確認できませんでした。閉じてから、もう一度お試しください。');
+    target.count=count;
+    $('deleteDescription').textContent=count===0?'削除する会話はありません。':all
+      ?`非表示にした会話も含め、保存した${count}件の会話と本文を削除します。元に戻せません。`
+      :`${count}件の会話と本文を保存先から削除します。元に戻せません。`;
+    $('confirmDelete').disabled=count===0;$('exportPdf').disabled=count===0;
+  }catch(error){if(deleteTarget===target){$('deleteDescription').textContent='削除する件数を確認できていません。';$('deleteStatus').textContent=error.message;}}
+}
+$('deleteChat').onclick=()=>openDelete(false);
+$('manageChats').onclick=()=>{if(!busy && ready && session){$('manageStatus').textContent='';$('manageDialog').showModal();}};
+$('closeManage').onclick=()=>$('manageDialog').close();
+$('deleteAllChats').onclick=()=>{$('manageDialog').close();openDelete(true);};
+$('cancelDelete').onclick=()=>{$('deleteDialog').close();deleteTarget=null;};
+function exportConversationsPdf(fromManagement=false){return run(async()=>{
+  const target=fromManagement?{all:true,id:null,userId:session?.user.id,version:epoch}:deleteTarget;
+  const outputStatus=$(fromManagement?'manageStatus':'deleteStatus');
+  if(!target || target.version!==epoch || target.userId!==session?.user.id)return;
+  $('exportPdf').disabled=true;$('confirmDelete').disabled=true;$('cancelDelete').disabled=true;
+  $('manageExportPdf').disabled=true;$('deleteAllChats').disabled=true;$('closeManage').disabled=true;
+  outputStatus.textContent='PDF用に会話を読み込んでいます…';
+  try {
+    const exported=[];
+    for(let offset=0;;offset+=100){
+      let query=db.from('conversations').select('id,title').eq('user_id',target.userId).order('id').range(offset,offset+99);
+      if(!target.all)query=query.eq('id',target.id);
+      const {data,error}=await query;
+      if(error || !Array.isArray(data))throw new Error('会話を読み込めませんでした。削除せずに、もう一度お試しください。');
+      if(target.version!==epoch)return;
+      for(const chat of data){
+        const entries=[];
+        for(let from=0;;from+=200){
+          const result=await db.from('messages').select('role,content,sequence').eq('conversation_id',chat.id).order('sequence',{ascending:true}).range(from,from+199);
+          if(result.error || !Array.isArray(result.data))throw new Error('本文を読み込めませんでした。削除せずに、もう一度お試しください。');
+          if(target.version!==epoch)return;
+          entries.push(...result.data);
+          if(result.data.length<200)break;
+        }
+        exported.push({...chat,entries});
+      }
+      if(data.length<100)break;
+    }
+    if(!exported.length)throw new Error('保存できる会話がありません。');
+    const doc=$('pdfPreview').contentDocument;
+    doc.open();doc.write('<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>スピリットドラゴンAI 会話</title><style>@page{size:A4;margin:18mm}body{font-family:"Yu Gothic",Meiryo,sans-serif;color:#222;background:#fff;font-size:11pt;line-height:1.8;padding:16px}h1{font-size:19pt}h2{font-size:15pt;overflow-wrap:anywhere}h3{font-size:11pt;margin-bottom:4px;break-after:avoid}p{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:0}section+section{break-before:page}.date{color:#666;font-size:9pt}@media print{body{padding:0}}</style></head><body></body></html>');doc.close();
+    const heading=doc.createElement('h1');heading.textContent='スピリットドラゴンAI 会話';doc.body.append(heading);
+    const date=doc.createElement('p');date.className='date';date.textContent='出力日時：'+new Date().toLocaleString('ja-JP');doc.body.append(date);
+    for(const chat of exported){
+      const section=doc.createElement('section'),title=doc.createElement('h2');title.textContent=chat.title;section.append(title);
+      for(const entry of chat.entries){const role=doc.createElement('h3'),body=doc.createElement('p');role.textContent=entry.role==='user'?'あなた':'スピリットドラゴンAI';body.textContent=entry.content;section.append(role,body);}
+      if(!chat.entries.length){const p=doc.createElement('p');p.textContent='この会話にはメッセージがありません。';section.append(p);}
+      doc.body.append(section);
+    }
+    outputStatus.textContent='';$('closePdf').textContent=fromManagement?'会話の管理に戻る':'削除確認に戻る';$('pdfDialog').showModal();
+  }catch(error){if(target.version===epoch)outputStatus.textContent=error.message;}
+  finally{$('exportPdf').disabled=false;$('confirmDelete').disabled=false;$('cancelDelete').disabled=false;$('manageExportPdf').disabled=false;$('closeManage').disabled=false;}
+});}
+$('exportPdf').onclick=()=>exportConversationsPdf(false);
+$('manageExportPdf').onclick=()=>exportConversationsPdf(true);
+$('manageDialog').addEventListener('cancel',event=>{if(busy)event.preventDefault();});
+$('printPdf').onclick=()=>{$('pdfPreview').contentWindow.focus();$('pdfPreview').contentWindow.print();};
+$('closePdf').onclick=()=>{$('pdfDialog').close();$('pdfPreview').src='about:blank';};
+$('pdfDialog').addEventListener('cancel',()=>{$('pdfPreview').src='about:blank';});
+$('deleteDialog').addEventListener('cancel',event=>{if(busy)event.preventDefault();else deleteTarget=null;});
+$('confirmDelete').onclick=()=>run(async()=>{
+  const target=deleteTarget;
+  if(!target || !(target.count>0) || target.version!==epoch || target.userId!==session?.user.id)return;
+  $('confirmDelete').disabled=true;$('cancelDelete').disabled=true;$('deleteStatus').textContent='削除しています…';
+  try {
+    const {error}=await db.rpc('delete_my_conversations',{p_conversation_id:target.all?null:target.id,p_delete_all:target.all});
+    if(error)throw new Error('削除を確認できませんでした。時間をおいて、もう一度お試しください。');
+    if(target.version!==epoch)return;
+    activeId=null;rows=[];chats=[];pending=null;input.value='';olderMore=false;historyMore=false;historyOffset=0;
+    try{sessionStorage.removeItem(storageKey());}catch{}
+    renderMessages();renderHistory();deleteTarget=null;$('deleteDialog').close();toggleSidebar(false);
+    status(target.all?'すべての会話を削除しました。':'会話を削除しました。');
+    try{await loadHistory();}catch{status('削除は完了しました。残りの履歴はページを再読み込みして確認してください。');}
+  }catch(error){if(target.version===epoch)$('deleteStatus').textContent=error.message;}
+  finally{$('confirmDelete').disabled=false;$('cancelDelete').disabled=false;}
+});
 $('closeAuth').onclick=()=>$('authDialog').close();
 $('googleLogin').onclick=async()=>{
   const button=$('googleLogin');button.disabled=true;$('authStatus').textContent='Googleを開いています…';

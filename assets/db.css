@@ -18,4 +18,10 @@ button:disabled { cursor: default; opacity: .45; }
 .dialog-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .older { display: block; margin: 0 auto 20px; }
 .chat-actions { margin-left: auto; }
+.account-actions { flex-wrap: wrap; }
+.logout-actions { border-top: 1px solid var(--line); padding-top: 12px; }
+.management-save { padding: 8px 0 16px; }
+.management-delete { border-top: 1px solid #666; padding: 20px 0 12px; }
+.topbar { flex-wrap: wrap; gap: 4px; }
+.danger { color: #ffb4a9; border-color: #a65a51; }
 @media(max-width:760px) { .model-button { font-size: 15px; } .chat-actions { font-size: 12px; padding: 7px; } .status { font-size: 12px; } }
