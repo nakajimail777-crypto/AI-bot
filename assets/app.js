@@ -4,11 +4,14 @@ let db, session = null, activeId = null, busy = false, ready = false, epoch = 0,
 let historyOffset = 0, historyMore = false, olderMore = false;
 let deleteTarget = null;
 let archivedChats = [];
+let usageVersion = 0, usageCache = new Map(), cooldownUntil = 0;
 const storageKey = () => `dragon-draft-${session?.user.id || 'none'}`;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 function toggleSidebar(open) { $('sidebar').classList.toggle('open', open); $('scrim').classList.toggle('show', open); }
 function controls() {
-  send.disabled = busy || !ready || !session || !input.value.trim();
+  send.disabled = busy || !ready || !session || !input.value.trim() || Date.now() < cooldownUntil;
+  send.title = Date.now() < cooldownUntil ? `あと約${Math.ceil((cooldownUntil-Date.now())/1000)}秒で送信できます` : '';
+  $('openUsage').hidden = !session;
   input.disabled = busy || !ready || !session;
   $('newChat').disabled = busy || !ready || !session;
   $('archiveChat').disabled = busy || !activeId;
@@ -26,7 +29,7 @@ function controls() {
 }
 function rememberDraft() {
   if (!session) return;
-  try { sessionStorage.setItem(storageKey(),JSON.stringify({ activeId, text:input.value, pending })); } catch {}
+  try { sessionStorage.setItem(storageKey(),JSON.stringify({ activeId, text:input.value, pending, cooldownUntil })); } catch {}
 }
 function renderMessages() {
   messages.replaceChildren();
@@ -46,7 +49,12 @@ function renderMessages() {
     const text=document.createElement('div'); text.className=row.role==='user'?'bubble':'assistant-text'; text.textContent=row.content;
     if (row.role==='assistant') {
       const wrap=document.createElement('div'); wrap.className='assistant-message';
-      const badge=document.createElement('div'); badge.className='assistant-badge'; badge.textContent='✦'; wrap.append(badge,text); block.append(wrap);
+      const badge=document.createElement('div'); badge.className='assistant-badge'; badge.textContent='✦';
+      const content=document.createElement('div'); content.className='assistant-content';
+      const detail=document.createElement('details'); detail.className='answer-usage'; detail.dataset.requestId=row.reply_to || '';
+      const title=document.createElement('summary'); title.textContent='トークン数・推定料金';
+      const stats=document.createElement('p'); stats.textContent=DragonUsage.answer(usageCache.get(row.reply_to));
+      detail.append(title,stats); content.append(text,detail); wrap.append(badge,content); block.append(wrap);
     } else block.append(text);
     messages.append(block);
   }
@@ -73,13 +81,14 @@ async function loadHistory(more=false) {
 async function loadMessages(older=false) {
   if(!activeId)return;
   const version=epoch, id=activeId;
-  let query=db.from('messages').select('id,role,content,sequence').eq('conversation_id',id).order('sequence',{ascending:false}).limit(50);
+  let query=db.from('messages').select('id,role,content,sequence,reply_to').eq('conversation_id',id).order('sequence',{ascending:false}).limit(50);
   if(older&&rows.length)query=query.lt('sequence',rows[0].sequence);
   const {data,error}=await query;
   if(error)throw new Error('会話を読み込めませんでした。履歴を開き直してください。');
   if(version!==epoch||activeId!==id)return;
   rows=older?[...data.reverse(),...rows]:data.reverse();olderMore=data.length===50;renderMessages();
   if(!older)$('conversation').scrollTop=$('conversation').scrollHeight;
+  void refreshUsage();
 }
 async function run(action) {
   if(busy || !ready)return;
@@ -91,6 +100,7 @@ async function changeSession(next) {
   session=next;
   if(oldId===nextId){controls();return;}
   epoch++;const version=epoch;ready=false;activeId=null;rows=[];chats=[];pending=null;input.value='';historyMore=false;olderMore=false;
+  usageVersion++; usageCache.clear(); cooldownUntil=0; $('usageDialog').close(); $('usageScope').value='self'; $('usageScopeLabel').hidden=true; $('usageMonthly').textContent='';
   deleteTarget=null;archivedChats=[];$('deleteDialog').close();$('manageDialog').close();$('archivedDialog').close();$('pdfDialog').close();$('pdfPreview').src='about:blank';
   $('profileName').textContent=session?.user.email||'ログイン'; $('profilePlan').textContent=session?'会話を保存できます':'メールでログイン';$('logout').hidden=!session;
   renderMessages();renderHistory();status('');
@@ -101,6 +111,7 @@ async function changeSession(next) {
     if(version!==epoch)return;
     let draft;try{draft=JSON.parse(sessionStorage.getItem(storageKey())||'null');}catch{}
     if(draft){
+      cooldownUntil=Number.isFinite(draft.cooldownUntil)?Math.min(draft.cooldownUntil,Date.now()+86400000):0;
       if(draft.activeId){
         const {data,error}=await db.from('conversations').select('id').eq('id',draft.activeId).is('archived_at',null).maybeSingle();
         if(error)throw error;
@@ -115,7 +126,7 @@ async function changeSession(next) {
   finally{if(version===epoch){ready=true;controls();}}
 }
 $('composer').addEventListener('submit',event=>{
-  event.preventDefault();if(!session||busy||!input.value.trim())return;
+  event.preventDefault();if(!session||busy||!input.value.trim()||Date.now()<cooldownUntil)return;
   run(async()=>{
     const text=input.value.trim(), version=epoch;
     if(text.length>4000)throw new Error('メッセージは4,000文字以内で入力してください。');
@@ -130,10 +141,18 @@ $('composer').addEventListener('submit',event=>{
     const {data:{session:fresh},error:authError}=await db.auth.getSession();
     if(authError||!fresh)throw new Error('ログインし直してください。');
     const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${fresh.access_token}`},body:JSON.stringify({message:text,conversationId:activeId,requestId:pending.requestId}),signal:AbortSignal.timeout(85000)});
-    const data=await response.json();
-    if(!response.ok)throw new Error(data.error||'送信できませんでした。入力を残しています。');
+    const data=await response.json().catch(()=>({}));
+    if(version!==epoch)return;
+    if(!response.ok) {
+      if(response.status===429 && Number.isFinite(data.retryAfterSeconds) && data.retryAfterSeconds>0) {
+        cooldownUntil=Date.now()+Math.min(data.retryAfterSeconds,86400)*1000;
+      }
+      rememberDraft();
+      throw new Error(data.error||(response.status===429?'今はAIを利用できません。少し時間をおいてお試しください。入力した内容は残っています。':'送信できませんでした。入力を残しています。'));
+    }
     if(!data.saved)throw new Error('保存を確認できませんでした。もう一度お試しください。');
     if(version!==epoch)return;
+    if(data.usage)usageCache.set(pending.requestId,data.usage);
     input.value='';pending=null;rememberDraft();status('保存しました');
     await loadMessages();await loadHistory();
   });
@@ -195,6 +214,38 @@ $('showArchivedChats').onclick=()=>run(async()=>{
   if(version!==epoch)return;
   archivedChats=data||[];renderArchivedChats();$('manageStatus').textContent='';$('manageDialog').close();$('archivedDialog').showModal();
 });
+async function refreshUsage() {
+  if(!session)return;
+  const version=++usageVersion, userEpoch=epoch, conversation=activeId;
+  const ids=[...new Set(rows.filter(row=>row.role==='assistant'&&row.reply_to).map(row=>row.reply_to))];
+  const month=$('usageMonth').value || new Date(Date.now()+9*3600000).toISOString().slice(0,7);
+  $('usageMonth').value=month;
+  if($('usageDialog').open)$('usageMonthly').textContent='集計しています…';
+  try {
+    const {data:{session:fresh}}=await db.auth.getSession();
+    if(!fresh)throw new Error('ログインし直してください。');
+    // Read receipts in pages as older messages are loaded; never truncate at 50.
+    const chunks=ids.length?Array.from({length:Math.ceil(ids.length/50)},(_,i)=>ids.slice(i*50,i*50+50)):[[]];
+    let result;
+    for(const chunk of chunks) {
+      const params=new URLSearchParams({month,scope:$('usageScope').value,requestIds:chunk.join(',')});
+      const r=await fetch('/api/usage?'+params,{headers:{Authorization:`Bearer ${fresh.access_token}`},signal:AbortSignal.timeout(10000)});
+      const data=await r.json();if(!r.ok)throw new Error(data.error);
+      if(version!==usageVersion||userEpoch!==epoch||conversation!==activeId)return;
+      for(const turn of data.turns || [])usageCache.set(turn.request_id,turn.usage);
+      result=data;
+    }
+    $('usageScopeLabel').hidden=!result.admin;
+    $('usageMonthly').textContent=DragonUsage.monthly(result);
+    document.querySelectorAll('.answer-usage').forEach(detail=>{detail.querySelector('p').textContent=DragonUsage.answer(usageCache.get(detail.dataset.requestId));});
+  }catch(error){if(version===usageVersion&&userEpoch===epoch)$('usageMonthly').textContent=error.message||'使用量を取得できませんでした。会話は続けられます。';}
+}
+$('openUsage').onclick=()=>{$('usageDialog').showModal();void refreshUsage();};
+$('closeUsage').onclick=()=>$('usageDialog').close();
+$('refreshUsage').onclick=()=>void refreshUsage();
+$('usageMonth').onchange=()=>void refreshUsage();
+$('usageScope').onchange=()=>void refreshUsage();
+setInterval(()=>{if(cooldownUntil){if(Date.now()>=cooldownUntil)cooldownUntil=0;controls();}},1000);
 $('closeArchived').onclick=()=>{$('archivedDialog').close();if(session)$('manageDialog').showModal();};
 $('archivedDialog').addEventListener('cancel',()=>{if(session)$('manageDialog').showModal();});
 $('deleteAllChats').onclick=()=>{$('manageDialog').close();openDelete(true);};
