@@ -1,6 +1,9 @@
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { embed } from '../scripts/prepare-knowledge.mjs';
 
+const MAX_CHUNKS = 50;
+const EMBEDDING_CONCURRENCY = 5;
+
 export function prepareMarkdown(name, text) {
   if (typeof name !== 'string' || !/^[^/\\\x00-\x1f]{1,150}\.md$/i.test(name)) throw new Error('Markdown（.md）ファイルを選んでください。');
   if (typeof text !== 'string' || !text.trim() || text.length > 40000 || text.includes('\0')) throw new Error('本文は1〜40,000文字にしてください。');
@@ -19,9 +22,23 @@ export function prepareMarkdown(name, text) {
     }
   }
   if(current.trim()) chunks.push(current.trim());
-  if(chunks.length>20) throw new Error('項目が多いため、ファイルを分けてください（最大20項目）。');
+  if(chunks.length>MAX_CHUNKS) throw new Error(`項目が多いため、ファイルを分けてください（最大${MAX_CHUNKS}項目）。`);
   return {title,chunks:chunks.map(content=>`資料名：${title}\n\n${content}`)};
+}async function createChunks(chunks, title, { embedder, fetcher, key }) {
+  const result = [];
+  for (let index = 0; index < chunks.length; index += EMBEDDING_CONCURRENCY) {
+    const group = chunks.slice(index, index + EMBEDDING_CONCURRENCY);
+    result.push(...await Promise.all(group.map(async (text, groupIndex) => ({
+      chunk_index: index + groupIndex,
+      content: text,
+      embedding: await embedder(`task: search result | title: ${title} | text: ${text}`, { fetcher, key }),
+      metadata: { title }
+    }))));
+  }
+  return result;
 }
+
+
 
 export function createBookshelfHandler({env=process.env,fetcher=fetch,embedder=embed}={}) {
   return async(req,res)=>{
