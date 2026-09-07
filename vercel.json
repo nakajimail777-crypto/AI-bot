@@ -1,14 +1,33 @@
 {
   "functions": {
-    "api/chat.js": { "maxDuration": 90 },
+    "api/chat.js": {
+      "maxDuration": 90
+    },
     "api/import-combination-note.js": {
       "maxDuration": 90,
       "includeFiles": "knowledge/ryuhijutsu-combination-interpretation-notes.md"
+    },
+    "api/bookshelf.js": {
+      "maxDuration": 90
     }
   },
-  "headers": [{ "source": "/(.*)", "headers": [
-    { "key": "X-Content-Type-Options", "value": "nosniff" },
-    { "key": "Referrer-Policy", "value": "no-referrer" },
-    { "key": "X-Frame-Options", "value": "DENY" }
-  ] }]
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        }
+      ]
+    }
+  ]
 }
