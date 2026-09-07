@@ -8,3 +8,23 @@ test('wrong secret makes no external requests',async()=>{const res=response();aw
 test('embedding failure never replaces stored document',async()=>{const calls=[];const res=response();await createBookshelfHandler({env,fetcher:async(url)=>{calls.push(url);return {ok:true,json:async()=>[{id:'existing'}]};},embedder:async()=>{throw Error('embedding failed');}})({method:'POST',body:{token:'test-secret',action:'save',id:'11111111-1111-4111-8111-111111111111',name:'x.md',content:'# One\nHello'}},res);assert.equal(res.code,502);assert.equal(calls.length,1);assert.ok(!calls[0].includes('rpc'));});
 test('save uses atomic registration with new UUID',async()=>{let body;const res=response();await createBookshelfHandler({env,fetcher:async(url,opts)=>{body=JSON.parse(opts.body);return {ok:true,status:204};},embedder:async()=>Array(768).fill(0.1)})({method:'POST',body:{token:'test-secret',action:'save',name:'x.md',content:'# One\nHello'}},res);assert.equal(res.code,200);assert.equal(body.p_metadata.origin,'bookshelf');assert.equal(body.p_chunks[0].embedding.length,768);assert.match(body.p_document_id,/^[a-f0-9-]{36}$/);});
 test('removal limited to shelf documents',async()=>{const res=response();let calls=0;await createBookshelfHandler({env,fetcher:async()=>{calls++;return {ok:true,json:async()=>[]};}})({method:'POST',body:{token:'test-secret',action:'remove',id:'11111111-1111-4111-8111-111111111111'}},res);assert.equal(res.code,404);assert.equal(calls,1);});
+test('50 sections remain supported and 51 rejected',()=>{
+ assert.equal(prepareMarkdown('x.md',Array.from({length:50},(_,i)=>`## ${i}\ntext`).join('\n')).chunks.length,50);
+ assert.throws(()=>prepareMarkdown('x.md',Array.from({length:51},(_,i)=>`## ${i}\ntext`).join('\n')));
+});
+test('partial embedding failure records completed calls before responding and preserves shelf',async()=>{
+ const calls=[];let n=0;const res=response();
+ const handler=createBookshelfHandler({env,fetcher:async(url,init)=>{
+  calls.push({url,init});
+  if(url.includes('googleapis')){
+   if(++n===1)return new Response('{}',{status:429});
+   await new Promise(resolve=>setTimeout(resolve,10));
+   return new Response(JSON.stringify({embedding:{values:Array(768).fill(0.1)},usageMetadata:{promptTokenCount:30}}));
+  }
+  return new Response(null,{status:201});
+ }});
+ await handler({method:'POST',body:{token:'test-secret',action:'save',name:'x.md',content:'# First\none\n## Second\ntwo'}},res);
+ assert.equal(res.code,429);assert.ok(!calls.some(c=>c.url.includes('register_knowledge_document')));
+ const events=JSON.parse(calls.find(c=>c.url.includes('api_usage_events')).init.body);
+ assert.equal(events.length,2);assert.ok(events.every(e=>e.category==='document_embedding'));assert.equal(events.find(e=>e.outcome==='succeeded').usage.input,30);
+});
