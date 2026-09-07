@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createMeter } from '../lib/usage.js';
 
 export function prepareNote(source) {
   const text=source.replace(/\r\n/g,'\n').trim();
@@ -28,7 +29,11 @@ export async function embed(text,{fetcher=fetch,key}={}) {
     method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
     body:JSON.stringify({content:{parts:[{text}]},output_dimensionality:768}),signal:AbortSignal.timeout(30000)
   });
-  if(!res.ok)throw new Error(`検索データの作成に失敗しました（HTTP ${res.status}）。登録用SQLは作成していません。`);
+  if(!res.ok) {
+    const error=new Error(`検索データの作成に失敗しました（HTTP ${res.status}）。登録用SQLは作成していません。`);
+    error.status=res.status; error.providerData=await res.json().catch(()=>null); error.providerHeaders=res.headers;
+    throw error;
+  }
   const data=await res.json();const values=data?.embedding?.values || data?.embeddings?.[0]?.values;
   if(!Array.isArray(values)||values.length!==768||values.some(v=>typeof v!=='number'||!Number.isFinite(v)))throw new Error('検索データの形式が不正です。');
   const length=Math.hypot(...values);
@@ -54,12 +59,17 @@ async function main(){
   if(dry){console.log('事前確認完了。外部送信・データベース変更はありません。');return;}
   const key=process.env.GEMINI_API_KEY;
   if(!key)throw new Error('GEMINI_API_KEYが未設定のため、ここで停止しました。キーをチャットに貼らず、設定済みの環境で実行してください。');
+  // CLI remains usable without DB credentials; when supplied, include preparation costs.
+  const meter=process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY
+    ? createMeter({embeddingCategory:'document_embedding'}) : null;
+  try {
   const vectors=[];
-  for(const chunk of note.chunks)vectors.push(await embed(`title: ${chunk.title} | text: ${chunk.content}`,{key}));
+  for(const chunk of note.chunks)vectors.push(await embed(`title: ${chunk.title} | text: ${chunk.content}`,{key,fetcher:meter?.fetch}));
   const queries=[];
-  for(const query of ['龍性5・龍導3の組み合わせを教えてください','龍性2・龍導4の組み合わせを教えてください'])queries.push(await embed(`task: retrieval | query: ${query}`,{key}));
+  for(const query of ['龍性5・龍導3の組み合わせを教えてください','龍性2・龍導4の組み合わせを教えてください'])queries.push(await embed(`task: retrieval | query: ${query}`,{key,fetcher:meter?.fetch}));
   const output=resolve('output/knowledge/combination-note-registration.sql');await mkdir(dirname(output),{recursive:true});
   await writeFile(output,registrationSql(note,vectors,queries),'utf8');
   console.log(`登録用SQLを作成しました: ${output}\nまだデータベースには登録していません。`);
+  } finally { if(meter)await meter.flush(); }
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)main().catch(()=>{console.error('登録準備を完了できませんでした。接続設定・入力ファイル・通信状態を確認してください。データベースは変更していません。');process.exitCode=1;});
