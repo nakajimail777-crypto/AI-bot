@@ -1,5 +1,7 @@
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { embed } from '../scripts/prepare-knowledge.mjs';
+import { createMeter } from '../lib/usage.js';
+import { rateLimitDetails } from '../lib/provider-errors.js';
 
 const MAX_CHUNKS = 50;
 const EMBEDDING_CONCURRENCY = 5;
@@ -30,12 +32,15 @@ async function createChunks(chunks, title, { embedder, fetcher, key }) {
   const result = [];
   for (let index = 0; index < chunks.length; index += EMBEDDING_CONCURRENCY) {
     const group = chunks.slice(index, index + EMBEDDING_CONCURRENCY);
-    result.push(...await Promise.all(group.map(async (text, groupIndex) => ({
+    const settled = await Promise.allSettled(group.map(async (text, groupIndex) => ({
       chunk_index: index + groupIndex,
       content: text,
       embedding: await embedder(`task: search result | title: ${title} | text: ${text}`, { fetcher, key }),
       metadata: { title }
-    }))));
+    })));
+    const failed = settled.find(item => item.status === 'rejected');
+    if (failed) throw failed.reason;
+    result.push(...settled.map(item => item.value));
   }
   return result;
 }
@@ -60,6 +65,7 @@ export function createBookshelfHandler({env=process.env,fetcher=fetch,embedder=e
       if(!r.ok) throw new Error('DB_FAILED');
       return r.status===204?null:r.json().catch(()=>null);
     }
+    const meter = createMeter({fetcher,env,embeddingCategory:'document_embedding'});
     try {
       if(action==='list') return res.status(200).json({documents:await db('knowledge_documents?metadata->>origin=eq.bookshelf&select=id,title,source_name,updated_at,metadata&order=updated_at.desc')});
       if(id) {
@@ -70,11 +76,19 @@ export function createBookshelfHandler({env=process.env,fetcher=fetch,embedder=e
         await db('rpc/bookshelf_remove',{p_document_id:id});
         return res.status(200).json({message:'本棚から取り出しました。AIの検索対象から外れます。'});
       }
-      const chunks=await createChunks(note.chunks,note.title,{embedder,fetcher,key:gemini});
+      const chunks=await createChunks(note.chunks,note.title,{embedder,fetcher:meter.fetch,key:gemini});
+      await meter.flush();
       const documentId=id||randomUUID();
       await db('rpc/register_knowledge_document',{p_document_id:documentId,p_title:note.title,p_source_name:name,p_metadata:{origin:'bookshelf',shelf_removed:false,embedding_model:'gemini-embedding-2',dimensions:768},p_chunks:chunks});
       return res.status(200).json({id:documentId,message:'本棚にしまいました。AIが参照できる状態です。'});
-    } catch {return fail(502,'処理結果を確認できませんでした。本棚を開き直して確認してください。');}
+    } catch(error) {
+      await meter.flush();
+      if(error.status === 429) {
+        const details = rateLimitDetails(error.providerData,error.providerHeaders);
+        return res.status(429).json({...details,error:'検索用データの作成が利用上限に達しました。少し時間をおいてお試しください。元の資料と選択したファイルは残っています。'});
+      }
+      return fail(502,'処理結果を確認できませんでした。本棚を開き直して確認してください。');
+    }
   };
 }
 export default createBookshelfHandler();

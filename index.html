@@ -407,6 +407,7 @@
         </span>
       </button>
       <div class="account-actions"><button id="manageChats" class="plain-button" type="button" hidden>会話の管理</button></div>
+      <div class="account-actions"><button id="openUsage" class="plain-button" type="button" hidden>API使用量</button></div>
       <div class="account-actions logout-actions"><button id="logout" class="plain-button" type="button" hidden>ログアウト</button></div>
     </aside>
 
@@ -516,6 +517,17 @@
     </form>
   </dialog>
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.js" integrity="sha384-CLZeq1dk8+Uzrs7TVvBUdlFoV5F0DMqgRoeHa8g5wJcuPe5SkVfEvdxB0ZuzlnBQ" crossorigin="anonymous"></script>
+  <dialog id="usageDialog" class="auth-dialog" aria-labelledby="usageTitle">
+    <h2 id="usageTitle">API使用量と推定料金</h2>
+    <label for="usageMonth">集計する月（日本時間）</label>
+    <input id="usageMonth" type="month" min="2026-01" max="2099-12">
+    <label id="usageScopeLabel" hidden>集計範囲
+      <select id="usageScope"><option value="self">あなたの会話</option><option value="all">サービス全体（管理者）</option></select>
+    </label>
+    <p id="usageMonthly" class="usage-monthly" role="status"></p>
+    <div class="dialog-actions"><button id="refreshUsage" class="plain-button" type="button">更新</button><button id="closeUsage" class="plain-button" type="button">閉じる</button></div>
+  </dialog>
+  <script defer src="/assets/usage-ui.js"></script>
   <script defer src="/assets/app.js"></script>
 </body>
 </html>
