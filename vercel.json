@@ -1,5 +1,11 @@
 {
-  "functions": { "api/chat.js": { "maxDuration": 90 } },
+  "functions": {
+    "api/chat.js": { "maxDuration": 90 },
+    "api/import-combination-note.js": {
+      "maxDuration": 90,
+      "includeFiles": "knowledge/ryuhijutsu-combination-interpretation-notes.md"
+    }
+  },
   "headers": [{ "source": "/(.*)", "headers": [
     { "key": "X-Content-Type-Options", "value": "nosniff" },
     { "key": "Referrer-Policy", "value": "no-referrer" },
