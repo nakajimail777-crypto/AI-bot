@@ -24,7 +24,9 @@ export function prepareMarkdown(name, text) {
   if(current.trim()) chunks.push(current.trim());
   if(chunks.length>MAX_CHUNKS) throw new Error(`項目が多いため、ファイルを分けてください（最大${MAX_CHUNKS}項目）。`);
   return {title,chunks:chunks.map(content=>`資料名：${title}\n\n${content}`)};
-}async function createChunks(chunks, title, { embedder, fetcher, key }) {
+}
+
+async function createChunks(chunks, title, { embedder, fetcher, key }) {
   const result = [];
   for (let index = 0; index < chunks.length; index += EMBEDDING_CONCURRENCY) {
     const group = chunks.slice(index, index + EMBEDDING_CONCURRENCY);
@@ -37,8 +39,6 @@ export function prepareMarkdown(name, text) {
   }
   return result;
 }
-
-
 
 export function createBookshelfHandler({env=process.env,fetcher=fetch,embedder=embed}={}) {
   return async(req,res)=>{
@@ -70,7 +70,7 @@ export function createBookshelfHandler({env=process.env,fetcher=fetch,embedder=e
         await db('rpc/bookshelf_remove',{p_document_id:id});
         return res.status(200).json({message:'本棚から取り出しました。AIの検索対象から外れます。'});
       }
-      const chunks=await Promise.all(note.chunks.map(async(text,index)=>({chunk_index:index,content:text,embedding:await embedder(`task: search result | title: ${note.title} | text: ${text}`,{fetcher,key:gemini}),metadata:{title:note.title}})));
+      const chunks=await createChunks(note.chunks,note.title,{embedder,fetcher,key:gemini});
       const documentId=id||randomUUID();
       await db('rpc/register_knowledge_document',{p_document_id:documentId,p_title:note.title,p_source_name:name,p_metadata:{origin:'bookshelf',shelf_removed:false,embedding_model:'gemini-embedding-2',dimensions:768},p_chunks:chunks});
       return res.status(200).json({id:documentId,message:'本棚にしまいました。AIが参照できる状態です。'});
