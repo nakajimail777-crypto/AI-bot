@@ -16,6 +16,8 @@ function controls() {
   $('newChat').disabled = busy || !ready || !session;
   $('archiveChat').disabled = busy || !activeId;
   $('archiveChat').hidden = !activeId;
+  $('copyChat').hidden = !session || !activeId;
+  $('copyChat').disabled = busy || !ready || !rows.length;
   $('deleteChat').hidden = !session || !activeId;
   $('deleteChat').disabled = busy || !ready;
   $('deleteAllChats').hidden = !session;
@@ -189,6 +191,33 @@ async function openDelete(all) {
   }catch(error){if(deleteTarget===target){$('deleteDescription').textContent='削除する件数を確認できていません。';$('deleteStatus').textContent=error.message;}}
 }
 $('deleteChat').onclick=()=>openDelete(false);
+$('copyChat').onclick=()=>run(async()=>{
+  if(!session || !activeId)return;
+  const version=epoch, id=activeId, copied=[];
+  status('会話をコピーしています…');
+  for(let from=0;;from+=200){
+    const {data,error}=await db.from('messages').select('role,content,sequence')
+      .eq('conversation_id',id).order('sequence',{ascending:true}).range(from,from+199);
+    if(version!==epoch || activeId!==id)return;
+    if(error)throw new Error('会話を読み込めませんでした。もう一度コピーしてください。');
+    copied.push(...data);
+    if(data.length<200)break;
+  }
+  if(!copied.length)throw new Error('コピーする会話がありません。');
+  const text=copied.map(row=>`${row.role==='user'?'あなた':'スピリットドラゴンAI'}\n${row.content}`).join('\n\n');
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const field=document.createElement('textarea'), previous=document.activeElement;
+    field.value=text;field.setAttribute('readonly','');
+    field.style.cssText='position:fixed;left:-9999px;top:0';document.body.append(field);
+    try {
+      field.select();
+      if(!document.execCommand('copy'))throw new Error('コピーできませんでした。ブラウザのクリップボード権限を確認して、もう一度お試しください。');
+    } finally {field.remove();previous?.focus();}
+  }
+  status('会話をコピーしました');
+});
 $('manageChats').onclick=()=>{if(!busy && ready && session){$('manageStatus').textContent='';$('manageDialog').showModal();}};
 $('closeManage').onclick=()=>$('manageDialog').close();
 function renderArchivedChats() {
