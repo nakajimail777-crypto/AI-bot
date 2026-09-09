@@ -1,4 +1,7 @@
 button:disabled { cursor: default; opacity: .45; }
+.pdf-attachment { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 12px; padding:10px; border:1px solid var(--line); border-radius:10px; }
+.pdf-attachment #pdfName { flex:1; min-width:0; overflow-wrap:anywhere; font-size:14px; }
+.pdf-attachment small { flex-basis:100%; color:var(--muted); font-size:12px; line-height:1.5; }
 [hidden] { display: none !important; }
 .assistant-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .assistant-content { min-width: 0; flex: 1; }

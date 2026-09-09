@@ -5,11 +5,18 @@ let historyOffset = 0, historyMore = false, olderMore = false;
 let deleteTarget = null;
 let archivedChats = [];
 let usageVersion = 0, usageCache = new Map(), cooldownUntil = 0;
+let attachedPdf = null, pdfReading = false, pdfVersion = 0;
+function clearPdf() {
+  pdfVersion++; attachedPdf=null; pdfReading=false;
+  $('pdfInput').value=''; $('pdfAttachment').hidden=true; $('pdfName').textContent='';
+}
 const storageKey = () => `dragon-draft-${session?.user.id || 'none'}`;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 function toggleSidebar(open) { $('sidebar').classList.toggle('open', open); $('scrim').classList.toggle('show', open); }
 function controls() {
-  send.disabled = busy || !ready || !session || !input.value.trim() || Date.now() < cooldownUntil;
+  send.disabled = busy || pdfReading || !ready || !session || (!input.value.trim() && !attachedPdf) || Date.now() < cooldownUntil;
+  $('attachPdf').disabled = busy || pdfReading || !ready || !session;
+  $('removePdf').disabled = busy;
   send.title = Date.now() < cooldownUntil ? `あと約${Math.ceil((cooldownUntil-Date.now())/1000)}秒で送信できます` : '';
   $('openUsage').hidden = !session;
   input.disabled = busy || !ready || !session;
@@ -65,7 +72,7 @@ function renderHistory() {
   const nav=$('history'); nav.replaceChildren();
   for (const chat of chats) {
     const button=document.createElement('button'); button.className='history-item'+(chat.id===activeId?' active':''); button.textContent=chat.title;
-    button.onclick=() => run(async()=>{ if(activeId!==chat.id){pending=null;input.value='';} activeId=chat.id; await loadMessages(); rememberDraft(); renderHistory(); toggleSidebar(false); });
+    button.onclick=() => run(async()=>{ if(activeId!==chat.id){clearPdf();pending=null;input.value='';} activeId=chat.id; await loadMessages(); rememberDraft(); renderHistory(); toggleSidebar(false); });
     nav.append(button);
   }
   if (!chats.length) { const p=document.createElement('p'); p.className='history-empty'; p.textContent=session?'保存した会話がここに表示されます。':'ログインして会話を始めましょう。'; nav.append(p); }
@@ -101,7 +108,7 @@ async function changeSession(next) {
   const oldId=session?.user.id, nextId=next?.user.id;
   session=next;
   if(oldId===nextId){controls();return;}
-  epoch++;const version=epoch;ready=false;activeId=null;rows=[];chats=[];pending=null;input.value='';historyMore=false;olderMore=false;
+  epoch++;const version=epoch;clearPdf();ready=false;activeId=null;rows=[];chats=[];pending=null;input.value='';historyMore=false;olderMore=false;
   usageVersion++; usageCache.clear(); cooldownUntil=0; $('usageDialog').close(); $('usageScope').value='self'; $('usageScopeLabel').hidden=true; $('usageMonthly').textContent='';
   deleteTarget=null;archivedChats=[];$('deleteDialog').close();$('manageDialog').close();$('archivedDialog').close();$('pdfDialog').close();$('pdfPreview').src='about:blank';
   $('profileName').textContent=session?.user.email||'ログイン'; $('profilePlan').textContent=session?'会話を保存できます':'メールでログイン';$('logout').hidden=!session;
@@ -128,9 +135,11 @@ async function changeSession(next) {
   finally{if(version===epoch){ready=true;controls();}}
 }
 $('composer').addEventListener('submit',event=>{
-  event.preventDefault();if(!session||busy||!input.value.trim()||Date.now()<cooldownUntil)return;
+  event.preventDefault();if(!session||busy||pdfReading||(!input.value.trim()&&!attachedPdf)||Date.now()<cooldownUntil)return;
   run(async()=>{
-    const text=input.value.trim(), version=epoch;
+    const text=input.value.trim() || '添付したPDFの内容を要約してください。', version=epoch;
+    const attachment=attachedPdf;
+    if(attachment && `${text}\n\n［添付PDF：${attachment.name}］`.length>4000)throw new Error('PDFのファイル名を含めて4,000文字以内になるよう、質問を短くしてください。');
     if(text.length>4000)throw new Error('メッセージは4,000文字以内で入力してください。');
     if(!activeId){
       const id=crypto.randomUUID();
@@ -138,11 +147,11 @@ $('composer').addEventListener('submit',event=>{
       if(error)throw new Error('会話を作成できませんでした。もう一度お試しください。');
       activeId=id;rememberDraft();
     }
-    if(!pending||pending.text!==text||pending.conversationId!==activeId)pending={requestId:crypto.randomUUID(),conversationId:activeId,text};
+    if(!pending||pending.text!==text||pending.conversationId!==activeId||pending.pdfId!==attachment?.id)pending={requestId:crypto.randomUUID(),conversationId:activeId,text,pdfId:attachment?.id};
     rememberDraft();status('返答を考えています…');
     const {data:{session:fresh},error:authError}=await db.auth.getSession();
     if(authError||!fresh)throw new Error('ログインし直してください。');
-    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${fresh.access_token}`},body:JSON.stringify({message:text,conversationId:activeId,requestId:pending.requestId}),signal:AbortSignal.timeout(85000)});
+    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${fresh.access_token}`},body:JSON.stringify({message:text,conversationId:activeId,requestId:pending.requestId,...(attachment?{attachment:{name:attachment.name,mimeType:'application/pdf',data:attachment.data}}:{})}),signal:AbortSignal.timeout(85000)});
     const data=await response.json().catch(()=>({}));
     if(version!==epoch)return;
     if(!response.ok) {
@@ -160,13 +169,38 @@ $('composer').addEventListener('submit',event=>{
   });
 });
 input.addEventListener('input',()=>{controls();rememberDraft();});
+$('attachPdf').onclick=()=>{if(!busy&&!pdfReading&&ready&&session)$('pdfInput').click();};
+$('removePdf').onclick=()=>{if(!busy){clearPdf();pending=null;rememberDraft();controls();status('PDFを外しました。');}};
+$('pdfInput').addEventListener('change',async()=>{
+  const file=$('pdfInput').files[0];if(!file)return;
+  if(busy||!ready||!session)return;
+  const version=++pdfVersion, userEpoch=epoch, chatId=activeId;
+  pdfReading=true;controls();status('PDFを読み込んでいます…');
+  try {
+    if(!/\.pdf$/i.test(file.name)||file.name.length>160||/[\x00-\x1f\x7f]/.test(file.name))throw new Error('PDFファイルを選んでください（ファイル名は160文字まで）。');
+    if(!file.size||file.size>3*1024*1024)throw new Error('PDFは3MB以下のファイルを選んでください。');
+    const header=await file.slice(0,5).text();
+    if(header!=='%PDF-')throw new Error('PDFを読み取れません。正しいPDFファイルを選び直してください。');
+    const data=await new Promise((resolve,reject)=>{
+      const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);
+      reader.onerror=()=>reject(new Error('PDFを読み込めませんでした。もう一度選んでください。'));
+      reader.readAsDataURL(file);
+    });
+    if(version!==pdfVersion||userEpoch!==epoch||chatId!==activeId)return;
+    attachedPdf={id:crypto.randomUUID(),name:file.name.trim(),data};pending=null;
+    const sizeLabel=file.size<1024*1024?`${Math.max(1,Math.ceil(file.size/1024))}KB`:`${(file.size/1024/1024).toFixed(2)}MB`;
+    $('pdfName').textContent=`PDF：${attachedPdf.name}（${sizeLabel}）`;
+    $('pdfAttachment').hidden=false;rememberDraft();status('PDFを添付しました。質問を入力して送信してください。');
+  }catch(error){if(version===pdfVersion)status(error.message,true);}
+  finally{if(version===pdfVersion){pdfReading=false;$('pdfInput').value='';controls();}}
+});
 input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('composer').requestSubmit();}});
-$('newChat').onclick=()=>{if(busy)return;activeId=null;rows=[];pending=null;input.value='';olderMore=false;rememberDraft();renderMessages();renderHistory();status('');toggleSidebar(false);input.focus();};
+$('newChat').onclick=()=>{if(busy)return;clearPdf();activeId=null;rows=[];pending=null;input.value='';olderMore=false;rememberDraft();renderMessages();renderHistory();status('');toggleSidebar(false);input.focus();};
 $('archiveChat').onclick=()=>run(async()=>{
   if(!activeId)return;
   const {error}=await db.from('conversations').update({archived_at:new Date().toISOString()}).eq('id',activeId);
   if(error)throw new Error('会話を非表示にできませんでした。');
-  activeId=null;rows=[];pending=null;input.value='';olderMore=false;rememberDraft();renderMessages();await loadHistory();status('会話を非表示にしました。');
+  clearPdf();activeId=null;rows=[];pending=null;input.value='';olderMore=false;rememberDraft();renderMessages();await loadHistory();status('会話を非表示にしました。');
 });
 $('profile').onclick=()=>{if(!session)$('authDialog').showModal();};
 async function openDelete(all) {
@@ -337,7 +371,7 @@ $('confirmDelete').onclick=()=>run(async()=>{
     const {error}=await db.rpc('delete_my_conversations',{p_conversation_id:target.all?null:target.id,p_delete_all:target.all});
     if(error)throw new Error('削除を確認できませんでした。時間をおいて、もう一度お試しください。');
     if(target.version!==epoch)return;
-    activeId=null;rows=[];chats=[];pending=null;input.value='';olderMore=false;historyMore=false;historyOffset=0;
+    clearPdf();activeId=null;rows=[];chats=[];pending=null;input.value='';olderMore=false;historyMore=false;historyOffset=0;
     try{sessionStorage.removeItem(storageKey());}catch{}
     renderMessages();renderHistory();deleteTarget=null;$('deleteDialog').close();toggleSidebar(false);
     status(target.all?'すべての会話を削除しました。':'会話を削除しました。');
