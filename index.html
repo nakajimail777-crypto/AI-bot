@@ -451,11 +451,13 @@
             <button id="attachPdf" class="attach-button" type="button" aria-label="PDFを添付（3MBまで）" title="PDFを添付（1ファイル・3MBまで）" disabled>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
             </button>
+            <button id="seikanMode" class="plain-button seikan-mode" type="button" aria-pressed="false" aria-describedby="seikanHint">静観モード：OFF</button>
             <button class="send-button" id="sendButton" type="submit" disabled aria-label="送信">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 12 6-6 6 6M12 6v12"/></svg>
             </button>
           </div>
         </form>
+        <p id="seikanHint" class="seikan-hint" hidden>答えを急がず、今の気持ちや感覚を一緒に見ていきます。</p>
         <p id="status" class="status" role="status"></p>
         <p class="notice">回答はAIによって生成されます。重要な内容は確認してください。</p>
       </div>
@@ -490,7 +492,7 @@
     <h2 id="deleteTitle">会話を削除しますか？</h2>
     <p id="deleteDescription"></p>
     <button id="exportPdf" class="plain-button" type="button">削除する前にPDFで保存</button>
-    <p>PDF保存では会話は削除されません。印刷画面で「PDFに保存」を選んでください。</p>
+    <p>PDFを保存しても会話は削除されません。次の画面でダウンロードできます。</p>
     <div class="dialog-actions">
       <button id="cancelDelete" class="plain-button" type="button" autofocus>キャンセル</button>
       <button id="confirmDelete" class="plain-button danger" type="button">削除する</button>
@@ -499,10 +501,10 @@
   </dialog>
   <dialog id="pdfDialog" class="auth-dialog" aria-labelledby="pdfTitle">
     <h2 id="pdfTitle">会話をPDFで保存</h2>
-    <p>内容を確認し、「PDFに保存」を押してください。開いた印刷画面で保存先を選べます。</p>
+    <p>内容を確認し、「PDFをダウンロード」を押してください。会話をPDFファイルとして保存します。</p>
     <iframe id="pdfPreview" title="保存する会話のプレビュー" style="width:100%;height:40vh;border:1px solid #777;background:white"></iframe>
     <div class="dialog-actions">
-      <button id="printPdf" class="plain-button" type="button">PDFに保存</button>
+      <a id="printPdf" class="plain-button" download="spirit-dragon-chat.pdf" style="text-decoration:none">PDFをダウンロード</a>
       <button id="closePdf" class="plain-button" type="button">削除確認に戻る</button>
     </div>
     <p>ダウンロードしたPDFを開いて確認してから、削除してください。</p>
@@ -534,6 +536,7 @@
     <div class="dialog-actions"><button id="refreshUsage" class="plain-button" type="button">更新</button><button id="closeUsage" class="plain-button" type="button">閉じる</button></div>
   </dialog>
   <script defer src="/assets/usage-ui.js"></script>
+  <script defer src="/assets/pdf-download.js"></script>
   <script defer src="/assets/app.js"></script>
 </body>
 </html>
