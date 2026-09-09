@@ -37,4 +37,9 @@ button:disabled { cursor: default; opacity: .45; }
 .archived-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar { flex-wrap: wrap; gap: 4px; }
 .danger { color: #ffb4a9; border-color: #a65a51; }
+.seikan-mode { margin-right: auto; margin-left: 8px; font-size: 12px; padding: 7px 10px; }
+.seikan-mode[aria-pressed="true"] { background: #24413c; border-color: #83b9a9; color: #d4f2e7; }
+.seikan-mode:focus-visible { outline: 2px solid #b8e4d4; outline-offset: 3px; }
+.seikan-mode:disabled { opacity: .5; cursor: default; }
+.seikan-hint { max-width: 760px; margin: 6px auto; color: #bad9ce; font-size: 12px; text-align: center; }
 @media(max-width:760px) { .model-button { font-size: 15px; } .chat-actions { font-size: 12px; padding: 7px; } .status { font-size: 12px; } }

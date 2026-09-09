@@ -3,7 +3,18 @@ const input = $('messageInput'), send = $('sendButton'), messages = $('messages'
 let db, session = null, activeId = null, busy = false, ready = false, epoch = 0, pending = null, rows = [], chats = [];
 let historyOffset = 0, historyMore = false, olderMore = false;
 let deleteTarget = null;
+let seikanMode = false;
+$('seikanMode').onclick=()=>{
+  if(busy)return;
+  seikanMode=!seikanMode;pending=null;rememberDraft();controls();
+  status(seikanMode?'静観モードに切り替えました。次の送信から、今ここで起きていることを一緒に見ていきます。':'通常モードに戻しました。次の送信から適用します。');
+};
 let archivedChats = [];
+let pdfDownloadUrl=null;
+function clearPdfDownload(){
+  if(pdfDownloadUrl){const previous=pdfDownloadUrl;setTimeout(()=>URL.revokeObjectURL(previous),60000);pdfDownloadUrl=null;}
+  $('printPdf').removeAttribute('href');
+}
 let usageVersion = 0, usageCache = new Map(), cooldownUntil = 0;
 let attachedPdf = null, pdfReading = false, pdfVersion = 0;
 function clearPdf() {
@@ -14,6 +25,10 @@ const storageKey = () => `dragon-draft-${session?.user.id || 'none'}`;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 function toggleSidebar(open) { $('sidebar').classList.toggle('open', open); $('scrim').classList.toggle('show', open); }
 function controls() {
+  $('seikanMode').disabled = busy || !ready || !session;
+  $('seikanMode').setAttribute('aria-pressed',String(seikanMode));
+  $('seikanMode').textContent = seikanMode?'静観モード：ON':'静観モード：OFF';
+  $('seikanHint').hidden = !seikanMode;
   send.disabled = busy || pdfReading || !ready || !session || (!input.value.trim() && !attachedPdf) || Date.now() < cooldownUntil;
   $('attachPdf').disabled = busy || pdfReading || !ready || !session;
   $('removePdf').disabled = busy;
@@ -38,7 +53,7 @@ function controls() {
 }
 function rememberDraft() {
   if (!session) return;
-  try { sessionStorage.setItem(storageKey(),JSON.stringify({ activeId, text:input.value, pending, cooldownUntil })); } catch {}
+  try { sessionStorage.setItem(storageKey(),JSON.stringify({ activeId, text:input.value, pending, cooldownUntil, seikanMode })); } catch {}
 }
 function renderMessages() {
   messages.replaceChildren();
@@ -107,10 +122,11 @@ async function run(action) {
 async function changeSession(next) {
   const oldId=session?.user.id, nextId=next?.user.id;
   session=next;
+  if(oldId!==nextId)seikanMode=false;
   if(oldId===nextId){controls();return;}
   epoch++;const version=epoch;clearPdf();ready=false;activeId=null;rows=[];chats=[];pending=null;input.value='';historyMore=false;olderMore=false;
   usageVersion++; usageCache.clear(); cooldownUntil=0; $('usageDialog').close(); $('usageScope').value='self'; $('usageScopeLabel').hidden=true; $('usageMonthly').textContent='';
-  deleteTarget=null;archivedChats=[];$('deleteDialog').close();$('manageDialog').close();$('archivedDialog').close();$('pdfDialog').close();$('pdfPreview').src='about:blank';
+  clearPdfDownload();deleteTarget=null;archivedChats=[];$('deleteDialog').close();$('manageDialog').close();$('archivedDialog').close();$('pdfDialog').close();$('pdfPreview').src='about:blank';
   $('profileName').textContent=session?.user.email||'ログイン'; $('profilePlan').textContent=session?'会話を保存できます':'メールでログイン';$('logout').hidden=!session;
   renderMessages();renderHistory();status('');
   if(!session){ready=true;controls();return;}
@@ -120,6 +136,7 @@ async function changeSession(next) {
     if(version!==epoch)return;
     let draft;try{draft=JSON.parse(sessionStorage.getItem(storageKey())||'null');}catch{}
     if(draft){
+      seikanMode=draft.seikanMode===true;
       cooldownUntil=Number.isFinite(draft.cooldownUntil)?Math.min(draft.cooldownUntil,Date.now()+86400000):0;
       if(draft.activeId){
         const {data,error}=await db.from('conversations').select('id').eq('id',draft.activeId).is('archived_at',null).maybeSingle();
@@ -147,11 +164,11 @@ $('composer').addEventListener('submit',event=>{
       if(error)throw new Error('会話を作成できませんでした。もう一度お試しください。');
       activeId=id;rememberDraft();
     }
-    if(!pending||pending.text!==text||pending.conversationId!==activeId||pending.pdfId!==attachment?.id)pending={requestId:crypto.randomUUID(),conversationId:activeId,text,pdfId:attachment?.id};
+    if(!pending||pending.text!==text||pending.conversationId!==activeId||pending.pdfId!==attachment?.id||pending.seikanMode!==seikanMode)pending={requestId:crypto.randomUUID(),conversationId:activeId,text,pdfId:attachment?.id,seikanMode};
     rememberDraft();status('返答を考えています…');
     const {data:{session:fresh},error:authError}=await db.auth.getSession();
     if(authError||!fresh)throw new Error('ログインし直してください。');
-    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${fresh.access_token}`},body:JSON.stringify({message:text,conversationId:activeId,requestId:pending.requestId,...(attachment?{attachment:{name:attachment.name,mimeType:'application/pdf',data:attachment.data}}:{})}),signal:AbortSignal.timeout(85000)});
+    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${fresh.access_token}`},body:JSON.stringify({message:text,conversationId:activeId,requestId:pending.requestId,seikanMode,...(attachment?{attachment:{name:attachment.name,mimeType:'application/pdf',data:attachment.data}}:{})}),signal:AbortSignal.timeout(85000)});
     const data=await response.json().catch(()=>({}));
     if(version!==epoch)return;
     if(!response.ok) {
@@ -342,6 +359,13 @@ function exportConversationsPdf(fromManagement=false){return run(async()=>{
       if(data.length<100)break;
     }
     if(!exported.length)throw new Error('保存できる会話がありません。');
+    outputStatus.textContent='PDFファイルを作成しています…';
+    clearPdfDownload();
+    const pdfBytes=await DragonPdf.create(exported);
+    if(target.version!==epoch)return;
+    pdfDownloadUrl=URL.createObjectURL(new Blob([pdfBytes],{type:'application/pdf'}));
+    $('printPdf').href=pdfDownloadUrl;
+    $('printPdf').download=`spirit-dragon-chat-${new Date().toISOString().replace(/[:.]/g,'-')}.pdf`;
     const doc=$('pdfPreview').contentDocument;
     doc.open();doc.write('<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>スピリットドラゴンAI 会話</title><style>@page{size:A4;margin:18mm}body{font-family:"Yu Gothic",Meiryo,sans-serif;color:#222;background:#fff;font-size:11pt;line-height:1.8;padding:16px}h1{font-size:19pt}h2{font-size:15pt;overflow-wrap:anywhere}h3{font-size:11pt;margin-bottom:4px;break-after:avoid}p{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:0}section+section{break-before:page}.date{color:#666;font-size:9pt}@media print{body{padding:0}}</style></head><body></body></html>');doc.close();
     const heading=doc.createElement('h1');heading.textContent='スピリットドラゴンAI 会話';doc.body.append(heading);
@@ -359,9 +383,8 @@ function exportConversationsPdf(fromManagement=false){return run(async()=>{
 $('exportPdf').onclick=()=>exportConversationsPdf(false);
 $('manageExportPdf').onclick=()=>exportConversationsPdf(true);
 $('manageDialog').addEventListener('cancel',event=>{if(busy)event.preventDefault();});
-$('printPdf').onclick=()=>{$('pdfPreview').contentWindow.focus();$('pdfPreview').contentWindow.print();};
-$('closePdf').onclick=()=>{$('pdfDialog').close();$('pdfPreview').src='about:blank';};
-$('pdfDialog').addEventListener('cancel',()=>{$('pdfPreview').src='about:blank';});
+$('closePdf').onclick=()=>{clearPdfDownload();$('pdfDialog').close();$('pdfPreview').src='about:blank';};
+$('pdfDialog').addEventListener('cancel',()=>{clearPdfDownload();$('pdfPreview').src='about:blank';});
 $('deleteDialog').addEventListener('cancel',event=>{if(busy)event.preventDefault();else deleteTarget=null;});
 $('confirmDelete').onclick=()=>run(async()=>{
   const target=deleteTarget;
