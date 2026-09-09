@@ -441,9 +441,14 @@
 
       <div class="composer-wrap">
         <form class="composer" id="composer">
+          <input id="pdfInput" type="file" accept=".pdf,application/pdf" hidden>
+          <div id="pdfAttachment" class="pdf-attachment" hidden>
+            <span id="pdfName"></span><button id="removePdf" class="plain-button" type="button" aria-label="添付PDFを外す">外す</button>
+            <small>この会話の送信にPDFを添付します。原本は保存されません。再読み込み後は選び直してください。</small>
+          </div>
           <textarea id="messageInput" rows="1" placeholder="メッセージを入力" aria-label="メッセージ" maxlength="4000" disabled></textarea>
           <div class="composer-actions">
-            <button class="attach-button" type="button" aria-label="ファイルを添付（デモ）">
+            <button id="attachPdf" class="attach-button" type="button" aria-label="PDFを添付（3MBまで）" title="PDFを添付（1ファイル・3MBまで）" disabled>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
             </button>
             <button class="send-button" id="sendButton" type="submit" disabled aria-label="送信">
