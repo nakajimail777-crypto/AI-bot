@@ -47,3 +47,8 @@ button:disabled { cursor: default; opacity: .45; }
 .trial-banner[hidden] { display:none; }
 .trial-banner small { flex-basis:100%; color:var(--muted); font-size:11px; line-height:1.5; }
 .trial-banner .plain-button { margin-left:auto; font-size:12px; }
+
+/* Keep account controls within the viewport; only the history list scrolls. */
+.sidebar { height: 100dvh; min-height: 0; overflow: hidden; }
+.sidebar > .sidebar-top, .sidebar > .profile, .sidebar > .account-actions { flex-shrink: 0; }
+.sidebar > .history { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
