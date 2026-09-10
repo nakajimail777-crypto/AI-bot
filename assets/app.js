@@ -2,6 +2,40 @@ const $ = id => document.getElementById(id);
 const input = $('messageInput'), send = $('sendButton'), messages = $('messages');
 let db, session = null, activeId = null, busy = false, ready = false, epoch = 0, pending = null, rows = [], chats = [];
 let historyOffset = 0, historyMore = false, olderMore = false;
+let trialRemaining=5, trialReady=false, trialPending=null, trialLoading=null;
+async function loadTrial(){
+ if(trialLoading?.version===epoch)return trialLoading.promise;
+ const version=epoch;
+ const promise=readTrial(version);
+ trialLoading={version,promise};
+ try{return await promise;}finally{if(trialLoading?.promise===promise)trialLoading=null;}
+}
+async function readTrial(version){
+ const response=await fetch('/api/guest-chat',{cache:'no-store'});
+ const data=await response.json();
+ if(version!==epoch||session)return;
+ if(!response.ok)throw new Error(data.error||'お試し会話を読み込めませんでした。');
+ rows=data.rows||[];trialRemaining=data.remaining;trialReady=true;
+ renderMessages();renderHistory();controls();
+}
+async function sendTrial(){
+ if(!trialReady||trialRemaining<=0){$('authDialog').showModal();return;}
+ const text=input.value.trim(),version=epoch;
+ if(text.length>4000)throw new Error('メッセージは4,000文字以内で入力してください。');
+ if(!trialPending||trialPending.text!==text||trialPending.mode!==seikanMode)trialPending={text,mode:seikanMode,id:crypto.randomUUID()};
+ status('返答を考えています…');
+ const response=await fetch('/api/guest-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,requestId:trialPending.id,seikanMode}),signal:AbortSignal.timeout(85000)});
+ const data=await response.json();
+ if(version!==epoch||session)return;
+ if(!response.ok){
+  if(['TRIAL_LIMIT','TRIAL_ATTEMPTS','TRIAL_NETWORK_LIMIT'].includes(data.code)){trialRemaining=0;$('authDialog').showModal();}
+  throw new Error(data.error||'送信できませんでした。入力は残っています。');
+ }
+ trialRemaining=data.remaining;input.value='';trialPending=null;
+ await loadTrial();
+ $('conversation').scrollTop=$('conversation').scrollHeight;
+ status(trialRemaining>0?'あと'+trialRemaining+'回お試しいただけます。':'5往復のお試しが終わりました。ログインすると新しい会話を始められます。');
+}
 let deleteTarget = null;
 let seikanMode = false;
 $('seikanMode').onclick=()=>{
@@ -25,16 +59,18 @@ const storageKey = () => `dragon-draft-${session?.user.id || 'none'}`;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 function toggleSidebar(open) { $('sidebar').classList.toggle('open', open); $('scrim').classList.toggle('show', open); }
 function controls() {
-  $('seikanMode').disabled = busy || !ready || !session;
+  $('seikanMode').disabled = busy || !ready || (!session&&!trialReady);
   $('seikanMode').setAttribute('aria-pressed',String(seikanMode));
   $('seikanMode').textContent = seikanMode?'静観モード：ON':'静観モード：OFF';
   $('seikanHint').hidden = !seikanMode;
-  send.disabled = busy || pdfReading || !ready || !session || (!input.value.trim() && !attachedPdf) || Date.now() < cooldownUntil;
+  send.disabled = busy || pdfReading || !ready || (!session&&(!trialReady||trialRemaining<=0)) || (!input.value.trim() && !attachedPdf) || Date.now() < cooldownUntil;
   $('attachPdf').disabled = busy || pdfReading || !ready || !session;
   $('removePdf').disabled = busy;
   send.title = Date.now() < cooldownUntil ? `あと約${Math.ceil((cooldownUntil-Date.now())/1000)}秒で送信できます` : '';
   $('openUsage').hidden = !session;
-  input.disabled = busy || !ready || !session;
+  input.disabled = busy || !ready || (!session&&(!trialReady||trialRemaining<=0));
+  $('trialBanner').hidden=!!session;
+  $('trialCount').textContent=trialRemaining>0?'ログインなしであと'+trialRemaining+'回お試しできます。':'お試しは終了しました。ログインして新しい会話を始めましょう。';
   $('newChat').disabled = busy || !ready || !session;
   $('archiveChat').disabled = busy || !activeId;
   $('archiveChat').hidden = !activeId;
@@ -65,7 +101,7 @@ function renderMessages() {
     const welcome=document.createElement('div'); welcome.className='welcome';
     const inner=document.createElement('div'); inner.className='welcome-inner';
     const h=document.createElement('h1'); h.textContent='心の声を、スピリットドラゴンに聞かせてください。';
-    const p=document.createElement('p'); p.textContent=session?'会話は保存され、履歴からいつでも続けられます。':'ログインすると、会話を保存して続きから話せます。';
+    const p=document.createElement('p'); p.textContent=session?'会話は保存され、履歴からいつでも続けられます。':'ログインせずに5往復までお話しできます。静観モードもお試しください。';
     inner.append(h,p); welcome.append(inner); messages.append(welcome);
   }
   for (const row of rows) {
@@ -77,6 +113,7 @@ function renderMessages() {
       const content=document.createElement('div'); content.className='assistant-content';
       const detail=document.createElement('details'); detail.className='answer-usage'; detail.dataset.requestId=row.reply_to || '';
       const title=document.createElement('summary'); title.textContent='トークン数・推定料金';
+      detail.hidden=!session;
       const stats=document.createElement('p'); stats.textContent=DragonUsage.answer(usageCache.get(row.reply_to));
       detail.append(title,stats); content.append(text,detail); wrap.append(badge,content); block.append(wrap);
     } else block.append(text);
@@ -90,7 +127,7 @@ function renderHistory() {
     button.onclick=() => run(async()=>{ if(activeId!==chat.id){clearPdf();pending=null;input.value='';} activeId=chat.id; await loadMessages(); rememberDraft(); renderHistory(); toggleSidebar(false); });
     nav.append(button);
   }
-  if (!chats.length) { const p=document.createElement('p'); p.className='history-empty'; p.textContent=session?'保存した会話がここに表示されます。':'ログインして会話を始めましょう。'; nav.append(p); }
+  if (!chats.length) { const p=document.createElement('p'); p.className='history-empty'; p.textContent=session?'保存した会話がここに表示されます。':'お試しは右の入力欄から。ログイン後は保存した会話がここに表示されます。'; nav.append(p); }
   if(historyMore){const b=document.createElement('button');b.className='history-item';b.textContent='さらに表示';b.onclick=()=>run(()=>loadHistory(true));nav.append(b);}
   controls();
 }
@@ -123,13 +160,13 @@ async function changeSession(next) {
   const oldId=session?.user.id, nextId=next?.user.id;
   session=next;
   if(oldId!==nextId)seikanMode=false;
-  if(oldId===nextId){controls();return;}
+  if(oldId===nextId){if(!next){ready=true;try{await loadTrial();}catch(error){status(error.message,true);}}controls();return;}
   epoch++;const version=epoch;clearPdf();ready=false;activeId=null;rows=[];chats=[];pending=null;input.value='';historyMore=false;olderMore=false;
   usageVersion++; usageCache.clear(); cooldownUntil=0; $('usageDialog').close(); $('usageScope').value='self'; $('usageScopeLabel').hidden=true; $('usageMonthly').textContent='';
   clearPdfDownload();deleteTarget=null;archivedChats=[];$('deleteDialog').close();$('manageDialog').close();$('archivedDialog').close();$('pdfDialog').close();$('pdfPreview').src='about:blank';
   $('profileName').textContent=session?.user.email||'ログイン'; $('profilePlan').textContent=session?'会話を保存できます':'メールでログイン';$('logout').hidden=!session;
   renderMessages();renderHistory();status('');
-  if(!session){ready=true;controls();return;}
+  if(!session){ready=true;trialReady=false;try{await loadTrial();}catch(error){status(error.message,true);}controls();return;}
   $('authDialog').close();
   try {
     await loadHistory();
@@ -152,8 +189,9 @@ async function changeSession(next) {
   finally{if(version===epoch){ready=true;controls();}}
 }
 $('composer').addEventListener('submit',event=>{
-  event.preventDefault();if(!session||busy||pdfReading||(!input.value.trim()&&!attachedPdf)||Date.now()<cooldownUntil)return;
+  event.preventDefault();if(busy||pdfReading||(!input.value.trim()&&!attachedPdf)||Date.now()<cooldownUntil)return;
   run(async()=>{
+    if(!session){await sendTrial();return;}
     const text=input.value.trim() || '添付したPDFの内容を要約してください。', version=epoch;
     const attachment=attachedPdf;
     if(attachment && `${text}\n\n［添付PDF：${attachment.name}］`.length>4000)throw new Error('PDFのファイル名を含めて4,000文字以内になるよう、質問を短くしてください。');
@@ -402,6 +440,7 @@ $('confirmDelete').onclick=()=>run(async()=>{
   }catch(error){if(target.version===epoch)$('deleteStatus').textContent=error.message;}
   finally{$('confirmDelete').disabled=false;$('cancelDelete').disabled=false;}
 });
+$('trialLogin').onclick=()=>$('authDialog').showModal();
 $('closeAuth').onclick=()=>$('authDialog').close();
 $('googleLogin').onclick=async()=>{
   const button=$('googleLogin');button.disabled=true;$('authStatus').textContent='Googleを開いています…';
