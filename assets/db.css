@@ -52,3 +52,11 @@ button:disabled { cursor: default; opacity: .45; }
 .sidebar { height: 100dvh; min-height: 0; overflow: hidden; }
 .sidebar > .sidebar-top, .sidebar > .profile, .sidebar > .account-actions { flex-shrink: 0; }
 .sidebar > .history { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+
+/* Composer tools wrap on narrow screens without pushing out Send. */
+.composer-actions { flex-wrap: wrap; gap: 6px; }
+.seikan-mode { margin-right: 0; margin-left: 0; }
+.blind-spot { font-size: 12px; padding: 7px 10px; }
+.blind-spot[aria-pressed="true"] { background: #493e23; border-color: #d2b66f; color: #ffedbd; }
+.blind-spot:focus-visible { outline: 2px solid #e0c886; outline-offset: 3px; }
+.composer-actions .send-button { margin-left: auto; flex-shrink: 0; }
