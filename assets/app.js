@@ -111,7 +111,7 @@ function renderMessages() {
     const welcome=document.createElement('div'); welcome.className='welcome';
     const inner=document.createElement('div'); inner.className='welcome-inner';
     const h=document.createElement('h1'); h.textContent='心の声を、スピリットドラゴンに聞かせてください。';
-    const p=document.createElement('p'); p.textContent=session?'会話は保存され、履歴からいつでも続けられます。':'ログインせずに5往復までお話しできます。静観モードもお試しください。';
+    const p=document.createElement('p'); p.textContent=session?'履歴からいつでも続けられます。':'ログインせずに5往復までお話しできます。静観モードもお試しください。';
     inner.append(h,p); welcome.append(inner); messages.append(welcome);
   }
   for (const row of rows) {
