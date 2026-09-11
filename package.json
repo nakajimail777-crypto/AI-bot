@@ -11,5 +11,8 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.3.14"
+  },
+  "dependencies": {
+    "@vercel/functions": "3.6.2"
   }
 }
