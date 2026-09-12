@@ -69,13 +69,43 @@ test('uses isolated server history, live persona and bookshelf and delivers with
   assert.equal(generation.contents[0].parts[0].text, 'earlier');
   const reply = s.calls.find(c => c.url.includes('api.line.me')).body;
   assert.match(reply.messages[0].text, /こんにちは。/);
-  assert.match(reply.messages[0].text, /Google/);
+  assert.match(reply.messages[0].text, /運営者が確認できる場合/);
+  assert.match(reply.messages[0].text, /https:\/\/ai-bot-beta-one.vercel.app\/data-handling.html/);
   assert.doesNotMatch(reply.messages[0].text, /private thought/);
   const reserves = s.calls.filter(c => c.body?.p_action === 'reserve');
   assert.match(reserves[0].body.p_user, /^[a-f0-9]{64}$/);
   assert.ok(s.calls.some(c => c.body?.p_action === 'finish' && c.body.p_remember));
   const stored = JSON.stringify(s.calls.filter(c => c.url.startsWith(env.SUPABASE_URL)).map(c => c.body));
   assert.ok(!stored.includes(user)); assert.ok(!stored.includes('reply-token'));
+});
+
+test('birthday searches both numbers and supplies calculated results with original history', async () => {
+  const s = setup({ state: { turns: [{ message: '痩せたい', reply: '生年月日は？' }] } });
+  await s.handler(request([event({ message: { type: 'text', text: '19850526' } })]));
+  const queries = s.calls.filter(c => c.url.includes('embedContent')).map(c => c.body.content.parts[0].text);
+  assert.equal(queries.length, 2);
+  assert.match(queries[0], /龍性9/);
+  assert.match(queries[1], /龍導8/);
+  const generation = s.calls.find(c => c.url.includes('generateContent')).body;
+  assert.match(generation.systemInstruction.parts[0].text, /サーバーで計算した数字/);
+  assert.equal(generation.contents[0].parts[0].text, '痩せたい');
+  assert.equal(generation.contents.at(-1).parts[0].text, '19850526');
+});
+
+test('data handling command is fixed, does not call AI or enter conversation history', async () => {
+  const s = setup();
+  await s.handler(request([event({ message: { type: 'text', text: 'データの扱い' } })]));
+  assert.ok(!s.calls.some(c => c.url.includes('generativelanguage')));
+  const reply = s.calls.find(c => c.url.includes('api.line.me')).body.messages[0].text;
+  assert.match(reply, /data-handling.html/);
+  assert.match(reply, /トーク画面のメッセージは残ります/);
+  assert.equal(s.calls.find(c => c.body?.p_action === 'finish').body.p_remember, false);
+});
+
+test('later conversation replies do not repeat the data notice', async () => {
+  const s = setup({ state: { turns: [{ message: 'こんにちは', reply: 'こんにちは' }], first: false } });
+  await s.handler(request([event()]));
+  assert.doesNotMatch(s.calls.find(c => c.url.includes('api.line.me')).body.messages[0].text, /data-handling.html/);
 });
 
 test('duplicates are ignored; busy and limited requests do not generate or enter history', async () => {
