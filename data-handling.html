@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LINEのデータの扱い｜スピリットドラゴンAI</title>
+  <meta name="description" content="スピリットドラゴンAIのLINEでの会話データの扱いと、履歴のリセットについて。">
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#171717;color:#ececec;font-family:system-ui,sans-serif;line-height:1.9}main{max-width:760px;margin:auto;padding:40px 22px 64px}h1{font-size:clamp(1.6rem,5vw,2.2rem);line-height:1.5}h2{font-size:1.2rem;margin-top:2em}a{color:#aee0d2;text-underline-offset:4px}li{margin:.65em 0}ul{padding-left:1.4em}.intro{color:#c9d5d1}.note{border-left:3px solid #86bbaa;padding:12px 18px;background:#222b28}footer{margin-top:40px;border-top:1px solid #444;padding-top:20px;font-size:.9rem}
+  </style>
+</head>
+<body><main>
+  <p class="intro">スピリットドラゴンAIをご利用いただく前に</p>
+  <h1>LINEのデータの扱い</h1>
+  <p>スピリットドラゴンAIは、日々の気持ちや考えを整理し、龍秘術の視点も交えながら、自分で納得できる選択を探すための対話AIです。</p>
+  <p class="note">LINEでの会話内容は、AIの返答生成や会話履歴のために処理・保存されます。運営者が管理・不具合調査などの際に内容を確認できる場合があります。</p>
+  <h2>会話はどのように使われますか</h2>
+  <ul>
+    <li>入力した文章は、関連資料の検索と返答生成のため、GoogleのAIサービスに送信します。返答生成には、このLINEでの直近の会話履歴も使います。</li>
+    <li>会話履歴はSupabaseに保存し、AIが続きの会話をするために直近20往復まで参照します。返信を届けるため、LINEのサービスも利用します。</li>
+    <li>LINEのユーザーIDは、サーバーで別の識別値に変換して会話を区別します。ただし、文章内に入力した個人情報が自動的に匿名化されるわけではありません。</li>
+    <li>送受信処理の状態やAIの使用量なども記録します。LINEの履歴とWeb版の履歴は別に扱います。</li>
+  </ul>
+  <h2>入力する内容はご自身で選べます</h2>
+  <p>氏名・住所・電話番号など、相談に必要のない個人情報や、他の方の個人情報は入力しないでください。家族・人間関係・仕事などの詳しい事情も、無理に書く必要はありません。</p>
+  <p>龍秘術の数字を計算するため、生年月日をお聞きすることがあります。生年月日を伝えず、ご自身で計算した龍性・龍導の数字だけを伝えることもできます。</p>
+  <h2>会話履歴をリセットするには</h2>
+  <p>LINEで「会話をリセット」と送ってください。AIが参照する、このLINEの保存済み会話履歴をリセットします。</p>
+  <p>LINEのトーク画面にあるメッセージや、Web版の履歴は消えません。また、外部サービスの記録やバックアップ、使用量・処理記録などを一括して削除する操作ではありません。</p>
+  <h2>じっくり話したいとき</h2>
+  <p>日常の整理にはAIを、対話の時間をとって深く扱いたいときには個人セッションを、という選び方もできます。セッションでの記録や秘密の扱いについては、お申し込み前に運営者へご確認ください。</p>
+  <p>AIは間違えることがあります。龍秘術は自分を振り返るための一つの視点として扱い、健康などの重大な判断を数字だけで決めないでください。</p>
+  <footer><a href="/">スピリットドラゴンAIへ</a><p>この案内はLINE版についての説明です。</p></footer>
+</main></body></html>
