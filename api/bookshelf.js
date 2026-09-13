@@ -55,11 +55,11 @@ export function createBookshelfHandler({env=process.env,fetcher=fetch,embedder=e
     const given=req.body?.token;
     if(typeof given!=='string'||Buffer.byteLength(given)!==Buffer.byteLength(token)||!timingSafeEqual(Buffer.from(given),Buffer.from(token))) return fail(401,'合言葉が違います。');
     const {action,id,name,content}=req.body||{};
-    if(!['list','save','remove'].includes(action)) return fail(400,'操作を確認してください。');
+    if(!['list','read','save','remove'].includes(action)) return fail(400,'操作を確認してください。');
     if(id!==undefined&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return fail(400,'資料の指定が正しくありません。');
     let note;
     if(action==='save') {try {note=prepareMarkdown(name,content);} catch(e){return fail(400,e.message);}}
-    if(action==='remove'&&!id) return fail(400,'資料を選んでください。');
+    if(['remove','read'].includes(action)&&!id) return fail(400,'資料を選んでください。');
     async function db(path,body) {
       const r=await fetcher(url+'/rest/v1/'+path,{method:body?'POST':'GET',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});
       if(!r.ok) throw new Error('DB_FAILED');
@@ -75,6 +75,10 @@ export function createBookshelfHandler({env=process.env,fetcher=fetch,embedder=e
       if(action==='remove') {
         await db('rpc/bookshelf_remove',{p_document_id:id});
         return res.status(200).json({message:'本棚から取り出しました。AIの検索対象から外れます。'});
+      }
+      if(action==='read') {
+        const chunks=await db(`knowledge_chunks?document_id=eq.${id}&select=content,chunk_index&order=chunk_index.asc`);
+        return res.status(200).json({content:(chunks||[]).map(chunk=>chunk.content).join('\n\n')});
       }
       const chunks=await createChunks(note.chunks,note.title,{embedder,fetcher:meter.fetch,key:gemini});
       await meter.flush();
