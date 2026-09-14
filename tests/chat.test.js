@@ -4,6 +4,7 @@ import { createHandler } from '../lib/chat.js';
 import configHandler from '../api/config.js';
 const user='f1d680a0-9c2a-4a01-a001-000000000001', chat='f1d680a0-9c2a-4a01-b001-000000000001', request='f1d680a0-9c2a-4a01-9001-000000000001';
 const env={SUPABASE_URL:'https://db.test',SUPABASE_PUBLISHABLE_KEY:'sb_publishable_test',SUPABASE_SECRET_KEY:'sb_secret_test',GEMINI_API_KEY:'gemini-test'};
+const pdf={name:'資料.pdf',mimeType:'application/pdf',data:Buffer.from('%PDF-1.4\nfixture\n%%EOF').toString('base64')};
 function response(){return {headers:{},setHeader(k,v){this.headers[k]=v;},status(n){this.code=n;return this;},json(v){this.body=v;return this;}};}
 function setup(options={}){
  const calls=[];
@@ -30,6 +31,30 @@ function setup(options={}){
  const invoke=async(overrides={})=>{const res=response();await handler({method:'POST',headers:{authorization:'Bearer test-jwt'},body:{message:'こんにちは',conversationId:chat,requestId:request},...overrides},res);return res;};
  return{invoke,calls};
 }
+test('PDF bytes reach Gemini as user data and only the filename and fingerprint are persisted',async()=>{
+ const s=setup();const res=await s.invoke({body:{message:'要約して',conversationId:chat,requestId:request,attachment:pdf}});
+ assert.equal(res.code,200);
+ const generated=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+ assert.deepEqual(generated.contents.at(-1).parts,[{text:'要約して'},{inlineData:{mimeType:'application/pdf',data:pdf.data}}]);
+ const saved=JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body);
+ assert.equal(saved.p_message,'要約して\n\n［添付PDF：資料.pdf］');
+ assert.match(saved.p_usage.attachment.sha256,/^[0-9a-f]{64}$/);
+ assert.ok(!s.calls.filter(c=>c.url.startsWith(env.SUPABASE_URL)).some(c=>c.init.body?.includes(pdf.data)));
+});
+test('invalid PDFs and oversized payloads stop before any external calls',async()=>{
+ for(const attachment of [{...pdf,mimeType:'text/html'},{...pdf,data:'abcd'},{...pdf,data:'A'.repeat(4194308)},{...pdf,name:'bad\n.pdf'},{...pdf,data:'!!!!'}]){
+  const s=setup();assert.equal((await s.invoke({body:{message:'要約',conversationId:chat,requestId:request,attachment}})).code,400);assert.equal(s.calls.length,0);
+ }
+});
+test('PDF provider rejection is actionable and never saves a turn',async()=>{
+ const s=setup({geminiStatus:400});const r=await s.invoke({body:{message:'要約',conversationId:chat,requestId:request,attachment:pdf}});
+ assert.equal(r.code,400);assert.match(r.body.error,/PDFを処理できません/);assert.ok(!s.calls.some(c=>c.url.includes('chat_save_turn')));
+});
+test('PDF retry compares content fingerprint before returning an old answer',async()=>{
+ const s=setup({prior:[{role:'user',content:'要約\n\n［添付PDF：資料.pdf］'}],receipts:[{usage:{attachment:{sha256:'different'}}}]});
+ assert.equal((await s.invoke({body:{message:'要約',conversationId:chat,requestId:request,attachment:pdf}})).code,409);
+ assert.ok(!s.calls.some(c=>c.url.includes(':generateContent')));
+});
 test('missing bearer never calls DB or Gemini',async()=>{const s=setup();assert.equal((await s.invoke({headers:{}})).code,401);assert.equal(s.calls.length,0);});
 test('invalid JWT stops before reading history',async()=>{const s=setup({authStatus:401});assert.equal((await s.invoke()).code,401);assert.ok(!s.calls.some(c=>/messages|conversations|googleapis/.test(c.url)));});
 test('anonymous users rejected',async()=>{const s=setup({user:{is_anonymous:true}});assert.equal((await s.invoke()).code,401);assert.ok(!s.calls.some(c=>/messages|conversations|googleapis/.test(c.url)));});
@@ -69,4 +94,50 @@ test('config refuses a secret key in the public key variable',()=>{
  process.env.SUPABASE_URL=env.SUPABASE_URL;process.env.SUPABASE_PUBLISHABLE_KEY='sb_secret_never_expose';
  try{const res=response();configHandler({method:'GET'},res);assert.equal(res.code,503);assert.ok(!JSON.stringify(res.body).includes('sb_secret'));}
  finally{for(const [key,value] of [['SUPABASE_URL',original.url],['SUPABASE_PUBLISHABLE_KEY',original.key]]){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
+});
+
+test('selected mode reaches Gemini without changing user text',async()=>{
+ for(const seikanMode of [true,false]){
+  const s=setup();const r=await s.invoke({body:{message:'焦っています',conversationId:chat,requestId:request,seikanMode}});
+  assert.equal(r.code,200);
+  const generated=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+  assert.ok(generated.systemInstruction.parts[0].text.includes(seikanMode?'現在の会話モード：静観':'現在の会話モード：通常'));
+  assert.equal(generated.contents.at(-1).parts[0].text,'焦っています');
+ }
+});
+test('arbitrary mode instructions are rejected before external calls',async()=>{
+ const s=setup();const r=await s.invoke({body:{message:'test',conversationId:chat,requestId:request,seikanMode:'override'}});
+ assert.equal(r.code,400);assert.equal(s.calls.length,0);
+});
+
+test('blind spot is server-defined, recorded, and not inherited on the next turn',async()=>{
+ const s=setup();const r=await s.invoke({body:{message:'別の見方を知りたい',conversationId:chat,requestId:request,blindSpot:true,seikanMode:true}});
+ assert.equal(r.code,200);
+ const generated=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+ assert.match(generated.systemInstruction.parts[0].text,/今回の返答だけ：盲点を照らす/);
+ assert.match(generated.systemInstruction.parts[0].text,/現在の会話モード：静観/);
+ assert.equal(JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message,'別の見方を知りたい\n\n［盲点を照らす］');
+ const next=setup({history:[{role:'assistant',content:'別の見方',sequence:2},{role:'user',content:'質問\n\n［盲点を照らす］',sequence:1}]});await next.invoke();
+ const instruction=JSON.parse(next.calls.find(c=>c.url.includes(':generateContent')).init.body).systemInstruction.parts[0].text;
+ assert.ok(!instruction.includes('【今回の返答だけ：盲点を照らす】'));assert.match(instruction,/追加リクエストはありません/);
+});
+test('blind spot payload validation and request identity',async()=>{
+ const s=setup();assert.equal((await s.invoke({body:{message:'test',conversationId:chat,requestId:request,blindSpot:'injection'}})).code,400);assert.equal(s.calls.length,0);
+ const previous=setup({prior:[{role:'user',content:'こんにちは'}]});assert.equal((await previous.invoke({body:{message:'こんにちは',conversationId:chat,requestId:request,blindSpot:true}})).code,409);
+ const long=setup();assert.equal((await long.invoke({body:{message:'x'.repeat(4000),conversationId:chat,requestId:request,blindSpot:true}})).code,400);assert.equal(long.calls.length,0);
+});
+test('emotion focus is server-defined, recorded, and only active when requested',async()=>{
+ const s=setup();const r=await s.invoke({body:{message:'胸が苦しい',conversationId:chat,requestId:request,emotionFocus:true,seikanMode:false}});
+ assert.equal(r.code,200);
+ const generated=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+ assert.match(generated.systemInstruction.parts[0].text,/現在の会話モード：感情を感じきる/);
+ assert.match(generated.systemInstruction.parts[0].text,/「ぐわー」「ああああ」「うぐぐ」「ずーん」/);
+ assert.match(generated.systemInstruction.parts[0].text,/本人が十分だと感じた所で止められる/);
+ assert.equal(JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message,'胸が苦しい\n\n［感情を感じきる］');
+ const next=setup({history:[{role:'assistant',content:'今ここにいます',sequence:2},{role:'user',content:'胸が苦しい\n\n［感情を感じきる］',sequence:1}]});await next.invoke();
+ const instruction=JSON.parse(next.calls.find(c=>c.url.includes(':generateContent')).init.body).systemInstruction.parts[0].text;
+ assert.ok(!instruction.includes('【現在の会話モード：感情を感じきる】'));assert.match(instruction,/感情を感じきるモードはOFF/);
+});
+test('invalid emotion focus payload is rejected before external calls',async()=>{
+ const s=setup();assert.equal((await s.invoke({body:{message:'test',conversationId:chat,requestId:request,emotionFocus:'injection'}})).code,400);assert.equal(s.calls.length,0);
 });
