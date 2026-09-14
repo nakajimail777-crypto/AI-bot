@@ -1,4 +1,5 @@
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LINE_HASH = /^[0-9a-f]{64}$/;
 const PAGE_SIZE = 25;
 const MESSAGE_PAGE_SIZE = 100;
 const SHELF = 'metadata->>origin=eq.bookshelf';
@@ -28,8 +29,9 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
 
       const q = req.query || {};
       const action = q.action ?? 'summary';
-      if (!['summary', 'books', 'book', 'conversations', 'conversation'].includes(action)) return fail(400, '操作を確認してください。');
+      if (!['summary', 'books', 'book', 'conversations', 'conversation', 'line_conversations', 'line_conversation'].includes(action)) return fail(400, '操作を確認してください。');
       if (['book', 'conversation'].includes(action) && (typeof q.id !== 'string' || !UUID.test(q.id))) return fail(400, '対象の指定が正しくありません。');
+      if (action === 'line_conversation' && (typeof q.id !== 'string' || !LINE_HASH.test(q.id))) return fail(400, '対象の指定が正しくありません。');
       const offsetText = q.offset ?? '0';
       if (typeof offsetText !== 'string' || !/^(0|[1-9]\d{0,6})$/.test(offsetText)) return fail(400, 'ページの指定が正しくありません。');
       const offset = Number(offsetText);
@@ -53,11 +55,12 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
       if (action === 'summary') {
         const until = now();
         const since = new Date(until.getTime() - 7 * 86400000);
-        const [books, conversations] = await Promise.all([
+        const [books, conversations, lineConversations] = await Promise.all([
           count(`knowledge_documents?${SHELF}&or=(metadata->>shelf_removed.is.null,metadata->>shelf_removed.eq.false)&select=id`),
-          count(`conversations?updated_at=gte.${encodeURIComponent(since.toISOString())}&updated_at=lte.${encodeURIComponent(until.toISOString())}&select=id`)
+          count(`conversations?updated_at=gte.${encodeURIComponent(since.toISOString())}&updated_at=lte.${encodeURIComponent(until.toISOString())}&select=id`),
+          count(`line_chat_sessions?updated_at=gte.${encodeURIComponent(since.toISOString())}&updated_at=lte.${encodeURIComponent(until.toISOString())}&select=user_hash`)
         ]);
-        return res.status(200).json({books, recentConversations: conversations, since: since.toISOString(), until: until.toISOString(), candidates: null});
+        return res.status(200).json({books, recentConversations: conversations + lineConversations, webRecentConversations: conversations, lineRecentConversations: lineConversations, since: since.toISOString(), until: until.toISOString(), candidates: null});
       }
       if (action === 'books') {
         const rows = await read(`knowledge_documents?${SHELF}&select=id,title,source_name,updated_at,metadata&order=updated_at.desc,id.desc&limit=${PAGE_SIZE + 1}&offset=${offset}`);
@@ -72,6 +75,21 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
       if (action === 'conversations') {
         const rows = await read(`conversations?select=id,title,updated_at,archived_at&order=updated_at.desc,id.desc&limit=${PAGE_SIZE + 1}&offset=${offset}`);
         return res.status(200).json(page(rows, PAGE_SIZE));
+      }
+      if (action === 'line_conversations') {
+        const rows = await read(`line_chat_sessions?select=user_hash,updated_at&order=updated_at.desc,user_hash.asc&limit=${PAGE_SIZE + 1}&offset=${offset}`);
+        return res.status(200).json(page(rows, PAGE_SIZE));
+      }
+      if (action === 'line_conversation') {
+        const rows = await read(`line_chat_sessions?user_hash=eq.${q.id}&select=user_hash,updated_at,turns&limit=1`);
+        if (!rows.length) return fail(404, 'LINE会話が見つかりません。保持期間を過ぎた可能性があります。');
+        const turns = Array.isArray(rows[0].turns) ? rows[0].turns : [];
+        const items = [];
+        for (const turn of turns) {
+          if (typeof turn?.message === 'string') items.push({role:'user',content:turn.message});
+          if (typeof turn?.reply === 'string') items.push({role:'assistant',content:turn.reply});
+        }
+        return res.status(200).json({lineConversation:{user_hash:rows[0].user_hash,updated_at:rows[0].updated_at},items,nextOffset:null});
       }
       const rows = await read(`conversations?id=eq.${q.id}&select=id,title,updated_at,archived_at&limit=1`);
       if (!rows.length) return fail(404, '会話が見つかりません。削除された可能性があります。');
