@@ -90,5 +90,6 @@ test('trial emotion focus reaches the model and rejects arbitrary instructions',
  const s=setup();const r=await s.invoke({body:{message:'悲しい',requestId:randomUUID(),emotionFocus:true,seikanMode:false,blindSpot:false}});assert.equal(r.code,200);
  assert.equal(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,'悲しい\n\n［感情を感じきる］');
  assert.match(s.calls.find(c=>c.url.includes(':generateContent')).body.systemInstruction.parts[0].text,/現在の会話モード：感情を感じきる/);
+ assert.match(s.calls.find(c=>c.url.includes(':generateContent')).body.systemInstruction.parts[0].text,/わーいわーいですね☺️/);
  const invalid=setup();assert.equal((await invalid.invoke({body:{message:'test',requestId:randomUUID(),emotionFocus:'override'}})).code,400);assert.equal(invalid.calls.length,0);
 });

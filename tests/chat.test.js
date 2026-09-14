@@ -132,6 +132,9 @@ test('emotion focus is server-defined, recorded, and only active when requested'
  const generated=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
  assert.match(generated.systemInstruction.parts[0].text,/現在の会話モード：感情を感じきる/);
  assert.match(generated.systemInstruction.parts[0].text,/「ぐわー」「ああああ」「うぐぐ」「ずーん」/);
+ assert.match(generated.systemInstruction.parts[0].text,/静かに観察することと同じ意味にしない/);
+ assert.match(generated.systemInstruction.parts[0].text,/わーいわーいですね☺️/);
+ assert.match(generated.systemInstruction.parts[0].text,/声、笑い、涙、表情、言葉、身体の動き/);
  assert.match(generated.systemInstruction.parts[0].text,/本人が十分だと感じた所で止められる/);
  assert.equal(JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message,'胸が苦しい\n\n［感情を感じきる］');
  const next=setup({history:[{role:'assistant',content:'今ここにいます',sequence:2},{role:'user',content:'胸が苦しい\n\n［感情を感じきる］',sequence:1}]});await next.invoke();
