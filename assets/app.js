@@ -31,7 +31,7 @@ async function sendTrial(){
   if(['TRIAL_LIMIT','TRIAL_ATTEMPTS','TRIAL_NETWORK_LIMIT'].includes(data.code)){trialRemaining=0;$('authDialog').showModal();}
   throw new Error(data.error||'送信できませんでした。入力は残っています。');
  }
- blindSpot=false;emotionFocus=false;trialRemaining=data.remaining;input.value='';trialPending=null;
+ blindSpot=false;trialRemaining=data.remaining;input.value='';trialPending=null;
  await loadTrial();
  $('conversation').scrollTop=$('conversation').scrollHeight;
  status(trialRemaining>0?'あと'+trialRemaining+'回お試しいただけます。':'5往復のお試しが終わりました。ログインすると新しい会話を始められます。');
@@ -47,7 +47,7 @@ $('blindSpot').onclick=()=>{
 $('emotionFocus').onclick=()=>{
  if(busy)return;
  emotionFocus=!emotionFocus;if(emotionFocus)blindSpot=false;pending=null;trialPending=null;rememberDraft();controls();
- status(emotionFocus?'次の返答では、解決を急がず今ある感情を一緒に感じていきます。':'感情を感じきる指定を取り消しました。');
+ status(emotionFocus?'感情を感じきるモードに切り替えました。言葉にならない感じも、そのまま話してください。':'感情を感じきるモードをOFFにしました。');
 };
 let seikanMode = false;
 $('seikanMode').onclick=()=>{
@@ -73,7 +73,7 @@ function toggleSidebar(open) { $('sidebar').classList.toggle('open', open); $('s
 function controls() {
   $('emotionFocus').disabled=busy||!ready||(!session&&(!trialReady||trialRemaining<=0));
   $('emotionFocus').setAttribute('aria-pressed',String(emotionFocus));
-  $('emotionFocus').textContent=emotionFocus?'🌊 感じる：次の1回':'🌊 感情を感じきる';
+  $('emotionFocus').textContent=emotionFocus?'🌊 感情を感じきる：ON':'🌊 感情を感じきる：OFF';
   $('emotionFocusHint').hidden=!emotionFocus;
   $('blindSpot').disabled=busy||!ready||(!session&&(!trialReady||trialRemaining<=0));
   $('blindSpot').setAttribute('aria-pressed',String(blindSpot));
@@ -239,7 +239,7 @@ $('composer').addEventListener('submit',event=>{
     if(!data.saved)throw new Error('保存を確認できませんでした。もう一度お試しください。');
     if(version!==epoch)return;
     if(data.usage)usageCache.set(pending.requestId,data.usage);
-    blindSpot=false;emotionFocus=false;input.value='';pending=null;rememberDraft();status('保存しました');
+    blindSpot=false;input.value='';pending=null;rememberDraft();status('保存しました');
     await loadMessages();await loadHistory();
   });
 });
