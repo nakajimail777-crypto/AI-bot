@@ -4,6 +4,7 @@ import {createAdminHandler} from '../api/admin.js';
 
 const admin='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
+const lineHash='a'.repeat(64);
 const env={SUPABASE_URL:'https://example.invalid',SUPABASE_PUBLISHABLE_KEY:'sb_publishable_test',SUPABASE_SECRET_KEY:'server-only',ADMIN_USER_IDS:admin};
 const response=()=>({code:200,headers:{},setHeader(k,v){this.headers[k]=v;},status(c){this.code=c;return this;},json(data){this.data=data;return this;}});
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
@@ -38,19 +39,21 @@ test('Supabase must validate token even if a forged session claims an admin id',
   assert.equal(res.code,401);assert.equal(calls,1);
 });
 test('query validation prevents injection and malformed page requests',async()=>{
-  for(const query of [{action:'conversation',id:admin+'&select=*'},{action:'book',id:[admin]},{action:'remove'},{action:'conversations',offset:'-1'},{offset:'1.2'},{offset:['0']},{action:['books']}]){
+  for(const query of [{action:'conversation',id:admin+'&select=*'},{action:'line_conversation',id:lineHash+'x'},{action:'line_conversation',id:[lineHash]},{action:'book',id:[admin]},{action:'remove'},{action:'conversations',offset:'-1'},{offset:'1.2'},{offset:['0']},{action:['books']}]){
     const {res,calls}=await invoke({query});assert.equal(res.code,400);assert.equal(calls.length,1);
   }
 });
 test('summary uses exact counts and a bounded seven-day interval; candidates stay unavailable',async()=>{
   const {res,calls}=await invoke({read:async(url,options)=>{
     assert.equal(options.method,'HEAD');assert.equal(options.headers.Prefer,'count=exact');
-    return new Response(null,{status:200,headers:{'content-range':`*/${url.includes('knowledge_documents')?1204:2050}`}});
+    return new Response(null,{status:200,headers:{'content-range':`*/${url.includes('knowledge_documents')?1204:url.includes('line_chat_sessions')?12:2050}`}});
   }});
-  assert.equal(res.code,200);assert.equal(res.data.books,1204);assert.equal(res.data.recentConversations,2050);assert.equal(res.data.candidates,null);
+  assert.equal(res.code,200);assert.equal(res.data.books,1204);assert.equal(res.data.recentConversations,2062);assert.equal(res.data.candidates,null);
+  assert.equal(res.data.webRecentConversations,2050);assert.equal(res.data.lineRecentConversations,12);
   assert.equal(res.data.since,'2026-09-06T03:00:00.000Z');
   assert.match(calls[1].url,/origin=eq.bookshelf/);assert.match(calls[1].url,/shelf_removed.is.null/);
   assert.match(calls[2].url,/updated_at=gte.*updated_at=lte/);
+  assert.match(calls[3].url,/line_chat_sessions.*updated_at=gte/);
 });
 test('missing count and DB failure are errors, never misleading zero counts',async()=>{
   for(const read of [()=>new Response(null,{status:200}),()=>json({message:'sensitive db details'},500)]){
@@ -58,10 +61,10 @@ test('missing count and DB failure are errors, never misleading zero counts',asy
   }
 });
 test('list pagination has a deterministic tie-breaker and never returns the sentinel row',async()=>{
-  for(const action of ['books','conversations']){
+  for(const action of ['books','conversations','line_conversations']){
     const {res,calls}=await invoke({query:{action,offset:'25'},read:()=>json(Array.from({length:26},(_,id)=>({id})))});
     assert.equal(res.code,200);assert.equal(res.data.items.length,25);assert.equal(res.data.nextOffset,50);
-    assert.match(calls[1].url,/order=updated_at.desc,id.desc&limit=26&offset=25/);
+    assert.match(calls[1].url,action==='line_conversations'?/order=updated_at.desc,user_hash.asc&limit=26&offset=25/:/order=updated_at.desc,id.desc&limit=26&offset=25/);
     assert.equal(calls[0].options.headers.Authorization,'Bearer admin-session');assert.equal(calls[1].options.headers.Authorization,'Bearer server-only');
   }
 });
@@ -83,6 +86,23 @@ test('conversation detail reads ordered messages in bounded pages, read-only',as
 test('book detail uses chunk pagination and retains literal content',async()=>{
   const {res,calls}=await invoke({query:{action:'book',id:admin},read:url=>json(url.includes('knowledge_chunks')?[{chunk_index:0,content:'<img onerror=alert(1)>'}]:[{id:admin,title:'Book'}])});
   assert.equal(res.code,200);assert.equal(res.data.items[0].content,'<img onerror=alert(1)>');assert.equal(res.data.nextOffset,null);assert.match(calls[2].url,/order=chunk_index.asc/);
+});
+test('LINE list exposes only hashes and timestamps, with deterministic pagination',async()=>{
+  const {res,calls}=await invoke({query:{action:'line_conversations',offset:'25'},read:()=>json(Array.from({length:26},(_,i)=>({user_hash:String(i).padStart(64,'0'),updated_at:'2026-09-13'})))});
+  assert.equal(res.data.items.length,25);assert.equal(res.data.nextOffset,50);
+  assert.match(calls[1].url,/select=user_hash,updated_at/);assert.ok(!calls[1].url.includes('turns'));
+});
+test('LINE detail validates hash and flattens retained turns without raw identifiers',async()=>{
+  const turns=[{message:'相談です',reply:'返答です'},{message:'<script>literal</script>',reply:'続き'}];
+  const {res,calls}=await invoke({query:{action:'line_conversation',id:lineHash},read:()=>json([{user_hash:lineHash,updated_at:'2026-09-13',turns}])});
+  assert.equal(res.code,200);assert.deepEqual(res.data.items.map(x=>x.role),['user','assistant','user','assistant']);
+  assert.equal(res.data.items[2].content,'<script>literal</script>');assert.equal(res.data.nextOffset,null);
+  assert.deepEqual(Object.keys(res.data.lineConversation).sort(),['updated_at','user_hash']);
+  assert.match(calls[1].url,new RegExp(`user_hash=eq.${lineHash}`));
+});
+test('missing LINE session returns 404 without querying another table',async()=>{
+  const {res,calls}=await invoke({query:{action:'line_conversation',id:lineHash}});
+  assert.equal(res.code,404);assert.equal(calls.length,2);
 });
 test('network and malformed table results fail without leaking provider messages',async()=>{
   for(const read of [()=>{throw Error('private-key-or-content');},()=>json({unexpected:true})]){
