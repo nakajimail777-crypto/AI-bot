@@ -59,4 +59,8 @@ button:disabled { cursor: default; opacity: .45; }
 .blind-spot { font-size: 12px; padding: 7px 10px; }
 .blind-spot[aria-pressed="true"] { background: #493e23; border-color: #d2b66f; color: #ffedbd; }
 .blind-spot:focus-visible { outline: 2px solid #e0c886; outline-offset: 3px; }
+.emotion-focus { font-size: 12px; padding: 7px 10px; }
+.emotion-focus[aria-pressed="true"] { background: #452c3b; border-color: #d99ab5; color: #ffe0ed; }
+.emotion-focus:focus-visible { outline: 2px solid #efb6cf; outline-offset: 3px; }
+.emotion-focus-hint { color: #efc7d8; }
 .composer-actions .send-button { margin-left: auto; flex-shrink: 0; }
