@@ -21,13 +21,14 @@
     $('gate').hidden = false;
     $('gateStatus').textContent = message;
   }
-  async function api(action, params = {}) {
+  async function api(action, params = {}, body) {
     if (!db) throw Error('ログイン機能を読み込めませんでした。ページを再読み込みしてください。');
     const {data, error} = await db.auth.getSession();
     if (error || !data.session || data.session.user.is_anonymous) {lock('管理者アカウントでログインしてください。');throw Error('ログインが必要です。');}
     if (state.userId && state.userId !== data.session.user.id) {lock('アカウントが変更されました。再確認してください。');throw Error('アカウントが変更されました。');}
     const response = await fetch('/api/admin?' + new URLSearchParams({action,...params}), {
-      headers:{Authorization:`Bearer ${data.session.access_token}`},cache:'no-store',signal:AbortSignal.timeout(25000)
+      method:body ? 'POST' : 'GET', body:body ? JSON.stringify(body) : undefined,
+      headers:{Authorization:`Bearer ${data.session.access_token}`, ...(body ? {'Content-Type':'application/json'} : {})},cache:'no-store',signal:AbortSignal.timeout(25000)
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -56,7 +57,7 @@
       let html;
       if (page === 'dashboard') {
         const [summary, books, logs] = await Promise.all([api('summary'),api('books'),api('conversations')]);
-        html = heading('対話から生まれた学びを、次の知識へ。', '<button id="refresh">更新</button>') + `<div class="stats">${[['学習候補','—','','抽出機能は準備中','✧'],['本棚登録',summary.books,'冊','取り出し済みの資料を除く','▤'],['最近の会話',summary.recentConversations,'件',`Web ${summary.webRecentConversations}件 · LINE ${summary.lineRecentConversations}件`,'▱']].map(s => `<article class="stat"><div class="stat-top">${s[0]}<span class="stat-icon">${s[4]}</span></div><div class="number">${s[1]}<small>${s[2]}</small></div><div class="stat-bottom">${s[3]}</div></article>`).join('')}</div><div class="grid"><section class="panel"><div class="panel-head"><h2>学習候補</h2><button class="text-button" data-page="candidates">画面を見る →</button></div><p class="empty">会話からの学びを、ここに集めます。</p><p class="hint">初期版は画面のみです。候補の抽出・保存はまだ行われません。</p></section><section class="panel"><div class="panel-head"><h2>知識の本棚</h2><button class="text-button" data-page="books">本棚を開く →</button></div>${bookRows(books.items.slice(0,3))}</section></div><section class="panel"><div class="panel-head"><h2>直近に更新されたWeb会話</h2><button class="text-button" data-page="logs">すべて見る →</button></div>${logTable(logs.items.slice(0,5))}</section><p class="hint">集計期間：${date(summary.since)} ～ ${date(summary.until)}（日本時間）。Webはアーカイブ済みを含みます。LINEは匿名化された利用者単位で、最大30日保持される直近20往復が対象です。お試し会話は含みません。</p>`;
+        html = heading('対話から生まれた学びを、次の知識へ。', '<button id="refresh">更新</button>') + `<div class="stats">${[['学習候補','—','','抽出機能は準備中','✧'],['本棚登録',summary.books,'冊','取り出し済みの資料を除く','▤'],['最近の会話',summary.recentConversations,'件',`Web ${summary.webRecentConversations}件 · LINE ${summary.lineRecentConversations}件`,'▱']].map(s => `<article class="stat"><div class="stat-top">${s[0]}<span class="stat-icon">${s[4]}</span></div><div class="number">${s[1]}<small>${s[2]}</small></div><div class="stat-bottom">${s[3]}</div></article>`).join('')}</div><div class="grid"><section class="panel"><div class="panel-head"><h2>学習候補</h2><button class="text-button" data-page="candidates">画面を見る →</button></div><p class="empty">会話からの学びを、ここに集めます。</p><p class="hint">会話ログの詳細から「学習候補に送る」で保存できます。自動抽出は行いません。</p></section><section class="panel"><div class="panel-head"><h2>知識の本棚</h2><button class="text-button" data-page="books">本棚を開く →</button></div>${bookRows(books.items.slice(0,3))}</section></div><section class="panel"><div class="panel-head"><h2>直近に更新されたWeb会話</h2><button class="text-button" data-page="logs">すべて見る →</button></div>${logTable(logs.items.slice(0,5))}</section><p class="hint">集計期間：${date(summary.since)} ～ ${date(summary.until)}（日本時間）。Webはアーカイブ済みを含みます。LINEは匿名化された利用者単位で、最大30日保持される直近20往復が対象です。お試し会話は含みません。</p>`;
       } else if (page === 'books') {
         const result = await api('books',{offset:state.offset});
         if (version !== state.version) return;
@@ -69,7 +70,10 @@
         state.nextOffset = result.nextOffset;
         html = heading('保存された会話を振り返り、学びの背景を確認します。','<button id="refresh">更新</button>') + sourceTabs() + `<p class="hint">${line?'匿名化された利用者ID · 直近20往復 · 最大30日保持':'更新順 · アーカイブ済みを含む会員の会話'}</p><section class="panel">${line?lineLogTable(result.items):logTable(result.items)}</section>${pagination()}`;
       } else {
-        html = heading('会話から得られた学びを確認し、本棚に残すものを選びます。') + `<section class="panel"><div class="panel-head"><h2>学習候補</h2><span class="pill gold">準備中</span></div><p class="hint">初期版はUIのみです。以下は項目の見本で、実際の候補ではありません。</p><article class="candidate"><label>学び</label><h3>会話から得られた学びが入ります</h3><label>理由</label><p>学びとして残す理由と、元会話の背景を表示します。</p><label>再利用性</label><span class="pill">未評価</span><div class="actions"><button disabled class="source">元会話を見る ↗</button><button disabled>捨てる</button><button disabled class="primary">＋ 本棚に追加</button></div></article></section>`;
+        const result = await api('candidates',{offset:state.offset});
+        if (version !== state.version) return;
+        state.nextOffset = result.nextOffset;
+        html = heading('会話ログから手動で保存した候補です。','<button id="refresh">更新</button>') + '<section class="panel"><div class="table-wrap"><table class="table"><thead><tr><th>作成日時</th><th>会話本文の冒頭</th><th>状態</th></tr></thead><tbody>' + result.items.map(item => `<tr><td>${date(item.created_at)}</td><td>${escapeHtml(item.original_text)}</td><td>${escapeHtml(item.status)}</td></tr>`).join('') + '</tbody></table>' + (result.items.length ? '' : '<p class="empty">学習候補はまだありません。</p>') + '</div></section>' + pagination();
       }
       if (version !== state.version || !state.authorized) return;
       $('view').innerHTML = html;
@@ -96,7 +100,7 @@
         meta.textContent = result.lineConversation ? `${date(record.updated_at)} · 匿名化ID · 最大30日保持` : result.conversation ? `${date(record.updated_at)} · ${record.archived_at?'アーカイブ済み':'保存済み'} · ID: ${record.id}` : record.source_name;
         $('dialogBody').append(meta);
         if (result.conversation || result.lineConversation) {
-          const future = document.createElement('div');future.className='actions';future.innerHTML='<button disabled>✧ この会話から学びを抽出</button><span class="hint">今後追加予定</span>';
+          const future = document.createElement('div');future.className='actions';future.innerHTML='<button id="saveCandidate">学習候補に送る</button><span class="hint">会話本文を保存します。AI分析は行いません。</span><span id="candidateStatus" role="status"></span>';
           $('dialogBody').append(future);
         }
       }
@@ -117,6 +121,22 @@
     } finally {
       target.busy=false;
       if(version===state.detailVersion)$('detailMore').disabled=false;
+    }
+  }
+  async function saveCandidate(button) {
+    const target = detail, version = state.detailVersion;
+    if (!target || button.disabled) return;
+    button.disabled = true;
+    const status = $('candidateStatus');
+    status.textContent = '保存しています…';
+    try {
+      await api('save_candidate',{}, {id:target.id, source:target.action === 'line_conversation' ? 'line' : 'web'});
+      if (version !== state.detailVersion || !state.authorized) return;
+      status.textContent = '学習候補に保存しました。';
+      button.textContent = '保存済み';
+    } catch(error) {
+      if (version !== state.detailVersion || !state.authorized) return;
+      status.textContent = error.message; button.disabled = false;
     }
   }
   function openDetail(action,id) {
@@ -148,6 +168,7 @@
     if(button.dataset.lineChat)openDetail('line_conversation',button.dataset.lineChat);
     if(button.dataset.book)openDetail('book',button.dataset.book);
     if(button.dataset.source&&state.page==='logs'){state.logSource=button.dataset.source;state.offset=0;renderPage();}
+    if(button.id==='saveCandidate'&&state.authorized)saveCandidate(button);
     if(button.id==='refresh')renderPage();
     if(button.id==='next'&&state.nextOffset!==null){state.offset=state.nextOffset;renderPage();}
     if(button.id==='previous'){state.offset=Math.max(0,state.offset-25);renderPage();}
