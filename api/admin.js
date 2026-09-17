@@ -9,7 +9,7 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Vary', 'Authorization');
     const fail = (status, error) => res.status(status).json({error});
-    if (req.method !== 'GET') {
+    if (req.method !== 'GET' && !(req.method === 'POST' && req.query?.action === 'save_candidate')) {
       res.setHeader('Allow', 'GET');
       return fail(405, 'この画面では閲覧のみ利用できます。');
     }
@@ -29,9 +29,10 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
 
       const q = req.query || {};
       const action = q.action ?? 'summary';
-      if (!['summary', 'books', 'book', 'conversations', 'conversation', 'line_conversations', 'line_conversation'].includes(action)) return fail(400, '操作を確認してください。');
+      if (!['summary', 'books', 'book', 'conversations', 'conversation', 'line_conversations', 'line_conversation', 'candidates', 'save_candidate'].includes(action)) return fail(400, '操作を確認してください。');
       if (['book', 'conversation'].includes(action) && (typeof q.id !== 'string' || !UUID.test(q.id))) return fail(400, '対象の指定が正しくありません。');
       if (action === 'line_conversation' && (typeof q.id !== 'string' || !LINE_HASH.test(q.id))) return fail(400, '対象の指定が正しくありません。');
+      if (action === 'save_candidate' && req.method !== 'POST') return fail(405, 'POSTで保存してください。');
       const offsetText = q.offset ?? '0';
       if (typeof offsetText !== 'string' || !/^(0|[1-9]\d{0,6})$/.test(offsetText)) return fail(400, 'ページの指定が正しくありません。');
       const offset = Number(offsetText);
@@ -52,6 +53,42 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
         return Number(total);
       }
       const page = (rows, size) => ({items: rows.slice(0, size), nextOffset: rows.length > size ? offset + size : null});
+      if (action === 'candidates') {
+        const rows = await read(`learning_items?select=id,created_at,original_text,status&order=created_at.desc,id.desc&limit=${PAGE_SIZE + 1}&offset=${offset}`);
+        return res.status(200).json({...page(rows, PAGE_SIZE), items: rows.slice(0, PAGE_SIZE).map(row => ({...row, original_text: row.original_text.slice(0, 240)}))});
+      }
+      if (action === 'save_candidate') {
+        const {id, source} = req.body || {};
+        if (!['web', 'line'].includes(source) || typeof id !== 'string' || !(source === 'web' ? UUID : LINE_HASH).test(id)) return fail(400, '対象の会話が正しくありません。');
+        const items = [];
+        if (source === 'line') {
+          const rows = await read(`line_chat_sessions?user_hash=eq.${id}&select=turns&limit=1`);
+          if (!rows.length) return fail(404, '会話が見つかりません。');
+          for (const turn of rows[0].turns || []) {
+            if (typeof turn.message === 'string') items.push({role:'user', content:turn.message});
+            if (typeof turn.reply === 'string') items.push({role:'assistant', content:turn.reply});
+          }
+        } else {
+          const rows = await read(`conversations?id=eq.${id}&select=id&limit=1`);
+          if (!rows.length) return fail(404, '会話が見つかりません。');
+          // Read all pages; never silently save only the visible detail page.
+          for (let start = 0;; start += 100) {
+            const batch = await read(`messages?conversation_id=eq.${id}&select=role,content,sequence&order=sequence.asc&limit=100&offset=${start}`);
+            items.push(...batch);
+            if (batch.length < 100) break;
+            if (items.length >= 10000) return fail(413, '会話が長すぎるため保存できませんでした。');
+          }
+        }
+        const original_text = items.filter(item => typeof item.content === 'string' && item.content.trim()).map(item => `${item.role === 'user' ? 'ユーザー' : item.role === 'assistant' ? 'スピリットドラゴン' : item.role}: ${item.content}`).join('\n\n');
+        if (!original_text) return fail(400, '保存する会話本文がありません。');
+        if (original_text.length > 1000000) return fail(413, '会話が長すぎるため保存できませんでした。');
+        const result = await fetcher(url + '/rest/v1/learning_items', {
+          method:'POST', headers:{...headers, 'Content-Type':'application/json', Prefer:'return=minimal'},
+          body:JSON.stringify({source_type:'conversation', source_id:id, session_id:id, original_text, status:'candidate'}), signal:AbortSignal.timeout(10000)
+        });
+        if (!result.ok) return fail(503, '学習候補に保存できませんでした。時間をおいて再試行してください。');
+        return res.status(201).json({saved:true});
+      }
       if (action === 'summary') {
         const until = now();
         const since = new Date(until.getTime() - 7 * 86400000);
