@@ -73,7 +73,7 @@
         const result = await api('candidates',{offset:state.offset});
         if (version !== state.version) return;
         state.nextOffset = result.nextOffset;
-        html = heading('会話ログから手動で保存した候補です。','<button id="refresh">更新</button>') + '<section class="panel"><div class="table-wrap"><table class="table"><thead><tr><th>作成日時</th><th>会話本文の冒頭</th><th>状態</th></tr></thead><tbody>' + result.items.map(item => `<tr><td>${date(item.created_at)}</td><td>${escapeHtml(item.original_text)}</td><td>${escapeHtml(item.status)}</td></tr>`).join('') + '</tbody></table>' + (result.items.length ? '' : '<p class="empty">学習候補はまだありません。</p>') + '</div></section>' + pagination();
+        html = heading('会話ログから手動で保存した候補です。','<button id="refresh">更新</button>') + '<section class="panel"><div class="table-wrap"><table class="table"><thead><tr><th>作成日時</th><th>会話本文の冒頭</th><th>状態</th><th>操作</th></tr></thead><tbody>' + result.items.map(item => `<tr><td>${date(item.created_at)}</td><td>${escapeHtml(item.original_text)}</td><td>${escapeHtml(item.status)}</td><td><button data-candidate="${escapeHtml(item.id)}">全文・学びを編集</button></td></tr>`).join('') + '</tbody></table>' + (result.items.length ? '' : '<p class="empty">学習候補はまだありません。</p>') + '</div></section>' + pagination();
       }
       if (version !== state.version || !state.authorized) return;
       $('view').innerHTML = html;
@@ -92,6 +92,19 @@
     try {
       const result = await api(target.action,{id:target.id,offset:target.offset});
       if (version !== state.detailVersion || !state.authorized) return;
+      if (target.action === 'candidate') {
+        const item = result.candidate;
+        target.savedText = item.learning_text || '';
+        target.updatedAt = item.updated_at;
+        $('dialogTitle').textContent = '学習候補の編集';
+        $('dialogBody').innerHTML = '<p class="hint" id="candidateMeta"></p><h3>元の会話（全文）</h3><div class="message candidate-original"><p id="candidateOriginal"></p></div><label for="learningText">残したい学び</label><p class="hint" id="learningHelp">会話から残したい内容を自分の言葉でまとめてください。元の会話本文は変更されません。20,000文字以内。</p><textarea id="learningText" rows="8" maxlength="20000" aria-describedby="learningHelp"></textarea><div class="actions"><button id="saveLearning" class="primary">学びを保存</button></div>';
+        $('candidateMeta').textContent = '作成：' + date(item.created_at) + ' · 更新：' + date(item.updated_at);
+        $('candidateOriginal').textContent = item.original_text;
+        $('learningText').value = target.savedText;
+        $('detailStatus').textContent = '';
+        $('detailMore').hidden = true;
+        return;
+      }
       const record = result.conversation || result.document || result.lineConversation;
       $('dialogTitle').textContent = result.lineConversation ? `LINE利用者 ${record.user_hash.slice(0,8)}` : record.title || '無題';
       if (target.offset === 0) {
@@ -122,6 +135,32 @@
       target.busy=false;
       if(version===state.detailVersion)$('detailMore').disabled=false;
     }
+  }
+  async function saveLearning(button) {
+    const target = detail, version = state.detailVersion;
+    if (!target || target.action !== 'candidate' || target.saving) return;
+    const input = $('learningText'), text = input.value;
+    target.saving = true; button.disabled = true;
+    $('detailStatus').textContent = '保存しています…';
+    try {
+      const result = await api('update_candidate', {}, {id:target.id, learning_text:text, expected_updated_at:target.updatedAt});
+      if (version !== state.detailVersion || !state.authorized) return;
+      target.savedText = result.candidate.learning_text;
+      target.updatedAt = result.candidate.updated_at;
+      $('detailStatus').textContent = input.value === target.savedText ? '学びを保存しました。' : '送信した内容を保存しました。その後の変更は未保存です。';
+    } catch(error) {
+      if (version === state.detailVersion && state.authorized) $('detailStatus').textContent = error.message;
+    } finally {
+      target.saving = false;
+      if (version === state.detailVersion && state.authorized) button.disabled = false;
+    }
+  }
+  function hasUnsavedLearning() {
+    return detail?.action === 'candidate' && $('learningText') && ($('learningText').value !== detail.savedText || detail.saving);
+  }
+  function closeDetail() {
+    if (hasUnsavedLearning() && !confirm('保存中、または未保存の変更があります。閉じてもよいですか？')) return;
+    $('detail').close();
   }
   async function saveCandidate(button) {
     const target = detail, version = state.detailVersion;
@@ -166,6 +205,8 @@
     if(button.dataset.page&&state.authorized){state.page=button.dataset.page;state.offset=0;renderPage();}
     if(button.dataset.chat)openDetail('conversation',button.dataset.chat);
     if(button.dataset.lineChat)openDetail('line_conversation',button.dataset.lineChat);
+    if(button.dataset.candidate&&state.authorized)openDetail('candidate',button.dataset.candidate);
+    if(button.id==='saveLearning'&&state.authorized)saveLearning(button);
     if(button.dataset.book)openDetail('book',button.dataset.book);
     if(button.dataset.source&&state.page==='logs'){state.logSource=button.dataset.source;state.offset=0;renderPage();}
     if(button.id==='saveCandidate'&&state.authorized)saveCandidate(button);
@@ -173,7 +214,9 @@
     if(button.id==='next'&&state.nextOffset!==null){state.offset=state.nextOffset;renderPage();}
     if(button.id==='previous'){state.offset=Math.max(0,state.offset-25);renderPage();}
   });
-  $('closeDialog').onclick=()=>$('detail').close();
+  $('closeDialog').onclick=closeDetail;
+  $('detail').addEventListener('cancel',event=>{event.preventDefault();closeDetail();});
+  window.addEventListener('beforeunload',event=>{if(hasUnsavedLearning()){event.preventDefault();event.returnValue='';}});
   $('detail').onclose=()=>{state.detailVersion++;detail=null;$('dialogBody').replaceChildren();};
   $('detailMore').onclick=loadDetail;
   $('retryAuth').onclick=authorize;
