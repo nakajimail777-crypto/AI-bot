@@ -454,6 +454,7 @@
             </button>
             <button id="seikanMode" class="plain-button seikan-mode" type="button" aria-pressed="false" aria-describedby="seikanHint">静観モード：OFF</button>
             <button id="emotionFocus" class="plain-button emotion-focus" type="button" aria-pressed="false" aria-describedby="emotionFocusHint">🌊 感情を感じきる：OFF</button>
+            <button id="encouragement" class="plain-button blind-spot" type="button" aria-pressed="false" aria-describedby="encouragementHint" hidden>少し強めに背中を押してもらう</button>
             <button id="blindSpot" class="plain-button blind-spot" type="button" aria-pressed="false" aria-describedby="blindSpotHint">🔦 盲点を照らす</button>
             <button class="send-button" id="sendButton" type="submit" disabled aria-label="送信">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 12 6-6 6 6M12 6v12"/></svg>
@@ -461,6 +462,7 @@
           </div>
         </form>
         <p id="emotionFocusHint" class="seikan-hint emotion-focus-hint" hidden>解決を急がず、擬音や言葉にならない感覚もそのまま受け止めます。もう一度押すとOFFになります。</p>
+        <p id="encouragementHint" class="seikan-hint" hidden>次に送る1返答だけ、小さな一歩を具体的に提案します。他のモードはこの1回だけ休みます。もう一度押すと取り消せます。</p>
         <p id="blindSpotHint" class="seikan-hint" hidden>次の返答だけ、違う角度から一つ照らします。もう一度押すと取り消せます。</p>
         <p id="seikanHint" class="seikan-hint" hidden>答えを急がず、今の気持ちや感覚を一緒に見ていきます。</p>
         <p id="status" class="status" role="status"></p>
@@ -542,6 +544,7 @@
   </dialog>
   <script defer src="/assets/usage-ui.js"></script>
   <script defer src="/assets/pdf-download.js"></script>
+  <script defer src="/assets/encouragement.js"></script>
   <script defer src="/assets/app.js"></script>
 </body>
 </html>
