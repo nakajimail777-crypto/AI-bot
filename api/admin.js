@@ -9,7 +9,7 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Vary', 'Authorization');
     const fail = (status, error) => res.status(status).json({error});
-    if (req.method !== 'GET' && !(req.method === 'POST' && req.query?.action === 'save_candidate')) {
+    if (req.method !== 'GET' && !(req.method === 'POST' && ['save_candidate', 'update_candidate'].includes(req.query?.action))) {
       res.setHeader('Allow', 'GET');
       return fail(405, 'この画面では閲覧のみ利用できます。');
     }
@@ -29,10 +29,10 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
 
       const q = req.query || {};
       const action = q.action ?? 'summary';
-      if (!['summary', 'books', 'book', 'conversations', 'conversation', 'line_conversations', 'line_conversation', 'candidates', 'save_candidate'].includes(action)) return fail(400, '操作を確認してください。');
-      if (['book', 'conversation'].includes(action) && (typeof q.id !== 'string' || !UUID.test(q.id))) return fail(400, '対象の指定が正しくありません。');
+      if (!['summary', 'books', 'book', 'conversations', 'conversation', 'line_conversations', 'line_conversation', 'candidates', 'save_candidate', 'candidate', 'update_candidate'].includes(action)) return fail(400, '操作を確認してください。');
+      if (['book', 'conversation', 'candidate'].includes(action) && (typeof q.id !== 'string' || !UUID.test(q.id))) return fail(400, '対象の指定が正しくありません。');
       if (action === 'line_conversation' && (typeof q.id !== 'string' || !LINE_HASH.test(q.id))) return fail(400, '対象の指定が正しくありません。');
-      if (action === 'save_candidate' && req.method !== 'POST') return fail(405, 'POSTで保存してください。');
+      if (['save_candidate', 'update_candidate'].includes(action) && req.method !== 'POST') return fail(405, 'POSTで保存してください。');
       const offsetText = q.offset ?? '0';
       if (typeof offsetText !== 'string' || !/^(0|[1-9]\d{0,6})$/.test(offsetText)) return fail(400, 'ページの指定が正しくありません。');
       const offset = Number(offsetText);
@@ -53,6 +53,25 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
         return Number(total);
       }
       const page = (rows, size) => ({items: rows.slice(0, size), nextOffset: rows.length > size ? offset + size : null});
+      if (action === 'candidate') {
+        const rows = await read(`learning_items?id=eq.${q.id}&select=id,original_text,learning_text,status,created_at,updated_at&limit=1`);
+        if (!rows.length) return fail(404, '学習候補が見つかりません。');
+        return res.status(200).json({candidate:rows[0]});
+      }
+      if (action === 'update_candidate') {
+        const {id, learning_text, expected_updated_at} = req.body || {};
+        if (typeof id !== 'string' || !UUID.test(id) || typeof learning_text !== 'string' || learning_text.length > 20000 || typeof expected_updated_at !== 'string' || expected_updated_at.length > 64 || !Number.isFinite(Date.parse(expected_updated_at))) return fail(400, '保存内容を確認してください。学びは20,000文字以内で入力してください。');
+        // Compare-and-set prevents another editor's saved changes from being overwritten.
+        const result = await fetcher(url + '/rest/v1/learning_items?id=eq.' + id + '&updated_at=eq.' + encodeURIComponent(expected_updated_at) + '&select=id,learning_text,updated_at', {
+          method:'PATCH', headers:{...headers, 'Content-Type':'application/json', Prefer:'return=representation'},
+          body:JSON.stringify({learning_text, updated_at:now().toISOString()}), signal:AbortSignal.timeout(10000)
+        });
+        if (!result.ok) return fail(503, '学びを保存できませんでした。入力内容は残っています。再試行してください。');
+        const rows = await result.json();
+        if (!Array.isArray(rows)) throw new Error('ADMIN_BAD_RESPONSE');
+        if (!rows.length) return fail(409, '別の画面で更新されたか、候補が削除されています。入力内容をコピーしてから開き直してください。');
+        return res.status(200).json({candidate:rows[0]});
+      }
       if (action === 'candidates') {
         const rows = await read(`learning_items?select=id,created_at,original_text,status&order=created_at.desc,id.desc&limit=${PAGE_SIZE + 1}&offset=${offset}`);
         return res.status(200).json({...page(rows, PAGE_SIZE), items: rows.slice(0, PAGE_SIZE).map(row => ({...row, original_text: row.original_text.slice(0, 240)}))});
