@@ -80,6 +80,12 @@ test('cross-site and invalid payloads cannot spend tokens',async()=>{
  }
 });
 
+test('trial encouragement is opt-in and marks the reserved turn',async()=>{
+ const s=setup();assert.equal((await s.invoke({body:{message:'後押ししてほしい',requestId:randomUUID(),encouragement:true}})).code,200);
+ assert.match(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,/［少し強めに背中を押す］/);
+ assert.match(s.calls.find(c=>c.url.includes(':generateContent')).body.systemInstruction.parts[0].text,/今回の返答だけ：少し強めに背中を押す/);
+ const invalid=setup();assert.equal((await invalid.invoke({body:{message:'test',requestId:randomUUID(),encouragement:'yes'}})).code,400);assert.equal(invalid.calls.length,0);
+});
 test('trial blind spot reaches the model and keeps a distinct retry message',async()=>{
  const s=setup();const r=await s.invoke({body:{message:'test',requestId:randomUUID(),blindSpot:true,seikanMode:false}});assert.equal(r.code,200);
  assert.equal(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,'test\n\n［盲点を照らす］');

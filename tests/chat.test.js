@@ -141,6 +141,15 @@ test('emotion focus is server-defined, recorded, and only active when requested'
  const instruction=JSON.parse(next.calls.find(c=>c.url.includes(':generateContent')).init.body).systemInstruction.parts[0].text;
  assert.ok(!instruction.includes('【現在の会話モード：感情を感じきる】'));assert.match(instruction,/感情を感じきるモードはOFF/);
 });
+test('encouragement applies once, records opt-in, and rejects invalid flags',async()=>{
+ const s=setup();assert.equal((await s.invoke({body:{message:'背中を押して',conversationId:chat,requestId:request,encouragement:true}})).code,200);
+ const gen=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+ assert.match(gen.systemInstruction.parts[0].text,/今回の返答だけ：少し強めに背中を押す/);
+ assert.match(JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message,/［少し強めに背中を押す］/);
+ const next=setup({history:[{role:'user',content:'背中を押して\n\n［少し強めに背中を押す］',sequence:1}]});await next.invoke();
+ assert.match(JSON.parse(next.calls.find(c=>c.url.includes(':generateContent')).init.body).systemInstruction.parts[0].text,/後押しの終了/);
+ const invalid=setup();assert.equal((await invalid.invoke({body:{message:'test',conversationId:chat,requestId:request,encouragement:'yes'}})).code,400);assert.equal(invalid.calls.length,0);
+});
 test('invalid emotion focus payload is rejected before external calls',async()=>{
  const s=setup();assert.equal((await s.invoke({body:{message:'test',conversationId:chat,requestId:request,emotionFocus:'injection'}})).code,400);assert.equal(s.calls.length,0);
 });
