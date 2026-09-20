@@ -28,12 +28,12 @@
     if (state.userId && state.userId !== data.session.user.id) {lock('アカウントが変更されました。再確認してください。');throw Error('アカウントが変更されました。');}
     const response = await fetch('/api/admin?' + new URLSearchParams({action,...params}), {
       method:body ? 'POST' : 'GET', body:body ? JSON.stringify(body) : undefined,
-      headers:{Authorization:`Bearer ${data.session.access_token}`, ...(body ? {'Content-Type':'application/json'} : {})},cache:'no-store',signal:AbortSignal.timeout(25000)
+      headers:{Authorization:`Bearer ${data.session.access_token}`, ...(body ? {'Content-Type':'application/json'} : {})},cache:'no-store',signal:AbortSignal.timeout(action === 'extract_candidate' ? 70000 : 25000)
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
       if ([401,403].includes(response.status)) lock(result.error || '管理者としてログインしてください。');
-      throw Error(result.error || '読み込めませんでした。再試行してください。');
+      throw Object.assign(Error(result.error || '読み込めませんでした。再試行してください。'), {usage:result.usage});
     }
     return result;
   }
@@ -57,7 +57,7 @@
       let html;
       if (page === 'dashboard') {
         const [summary, books, logs] = await Promise.all([api('summary'),api('books'),api('conversations')]);
-        html = heading('対話から生まれた学びを、次の知識へ。', '<button id="refresh">更新</button>') + `<div class="stats">${[['学習候補','—','','抽出機能は準備中','✧'],['本棚登録',summary.books,'冊','取り出し済みの資料を除く','▤'],['最近の会話',summary.recentConversations,'件',`Web ${summary.webRecentConversations}件 · LINE ${summary.lineRecentConversations}件`,'▱']].map(s => `<article class="stat"><div class="stat-top">${s[0]}<span class="stat-icon">${s[4]}</span></div><div class="number">${s[1]}<small>${s[2]}</small></div><div class="stat-bottom">${s[3]}</div></article>`).join('')}</div><div class="grid"><section class="panel"><div class="panel-head"><h2>学習候補</h2><button class="text-button" data-page="candidates">画面を見る →</button></div><p class="empty">会話からの学びを、ここに集めます。</p><p class="hint">会話ログの詳細から「学習候補に送る」で保存できます。自動抽出は行いません。</p></section><section class="panel"><div class="panel-head"><h2>知識の本棚</h2><button class="text-button" data-page="books">本棚を開く →</button></div>${bookRows(books.items.slice(0,3))}</section></div><section class="panel"><div class="panel-head"><h2>直近に更新されたWeb会話</h2><button class="text-button" data-page="logs">すべて見る →</button></div>${logTable(logs.items.slice(0,5))}</section><p class="hint">集計期間：${date(summary.since)} ～ ${date(summary.until)}（日本時間）。Webはアーカイブ済みを含みます。LINEは匿名化された利用者単位で、最大30日保持される直近20往復が対象です。お試し会話は含みません。</p>`;
+        html = heading('対話から生まれた学びを、次の知識へ。', '<button id="refresh">更新</button>') + `<div class="stats">${[['学習候補','—','','候補の詳細から手動で抽出','✧'],['本棚登録',summary.books,'冊','取り出し済みの資料を除く','▤'],['最近の会話',summary.recentConversations,'件',`Web ${summary.webRecentConversations}件 · LINE ${summary.lineRecentConversations}件`,'▱']].map(s => `<article class="stat"><div class="stat-top">${s[0]}<span class="stat-icon">${s[4]}</span></div><div class="number">${s[1]}<small>${s[2]}</small></div><div class="stat-bottom">${s[3]}</div></article>`).join('')}</div><div class="grid"><section class="panel"><div class="panel-head"><h2>学習候補</h2><button class="text-button" data-page="candidates">画面を見る →</button></div><p class="empty">会話からの学びを、ここに集めます。</p><p class="hint">会話ログから候補を保存し、候補の詳細でAI抽出を試せます。保存前に人が確認します。</p></section><section class="panel"><div class="panel-head"><h2>知識の本棚</h2><button class="text-button" data-page="books">本棚を開く →</button></div>${bookRows(books.items.slice(0,3))}</section></div><section class="panel"><div class="panel-head"><h2>直近に更新されたWeb会話</h2><button class="text-button" data-page="logs">すべて見る →</button></div>${logTable(logs.items.slice(0,5))}</section><p class="hint">集計期間：${date(summary.since)} ～ ${date(summary.until)}（日本時間）。Webはアーカイブ済みを含みます。LINEは匿名化された利用者単位で、最大30日保持される直近20往復が対象です。お試し会話は含みません。</p>`;
       } else if (page === 'books') {
         const result = await api('books',{offset:state.offset});
         if (version !== state.version) return;
@@ -97,7 +97,7 @@
         target.savedText = item.learning_text || '';
         target.updatedAt = item.updated_at;
         $('dialogTitle').textContent = '学習候補の編集';
-        $('dialogBody').innerHTML = '<p class="hint" id="candidateMeta"></p><h3>元の会話（全文）</h3><div class="message candidate-original"><p id="candidateOriginal"></p></div><label for="learningText">残したい学び</label><p class="hint" id="learningHelp">会話から残したい内容を自分の言葉でまとめてください。元の会話本文は変更されません。20,000文字以内。</p><textarea id="learningText" rows="8" maxlength="20000" aria-describedby="learningHelp"></textarea><div class="actions"><button id="saveLearning" class="primary">学びを保存</button></div>';
+        $('dialogBody').innerHTML = '<p class="hint" id="candidateMeta"></p><h3>元の会話（全文）</h3><div class="message candidate-original"><p id="candidateOriginal"></p></div><div class="actions"><button id="extractLearning">この会話から学びを抽出</button></div><p class="hint">元会話をAIで分析します。結果は下書きです。確認・修正してから保存してください。RAGには登録しません。</p><p id="extractionUsage" class="hint" role="status"></p><section id="extractionPreview" hidden><h3>抽出結果のプレビュー（未保存）</h3><div class="message"><p id="extractionText"></p></div><button id="applyExtraction">残したい学びに反映</button></section><label for="learningText">残したい学び</label><p class="hint" id="learningHelp">会話から残したい内容を自分の言葉でまとめてください。元の会話本文は変更されません。20,000文字以内。</p><textarea id="learningText" rows="8" maxlength="20000" aria-describedby="learningHelp"></textarea><div class="actions"><button id="saveLearning" class="primary">学びを保存</button></div>';
         $('candidateMeta').textContent = '作成：' + date(item.created_at) + ' · 更新：' + date(item.updated_at);
         $('candidateOriginal').textContent = item.original_text;
         $('learningText').value = target.savedText;
@@ -138,9 +138,9 @@
   }
   async function saveLearning(button) {
     const target = detail, version = state.detailVersion;
-    if (!target || target.action !== 'candidate' || target.saving) return;
+    if (!target || target.action !== 'candidate' || target.saving || target.extracting) return;
     const input = $('learningText'), text = input.value;
-    target.saving = true; button.disabled = true;
+    target.saving = true; button.disabled = true; $('extractLearning').disabled = true;
     $('detailStatus').textContent = '保存しています…';
     try {
       const result = await api('update_candidate', {}, {id:target.id, learning_text:text, expected_updated_at:target.updatedAt});
@@ -152,14 +152,61 @@
       if (version === state.detailVersion && state.authorized) $('detailStatus').textContent = error.message;
     } finally {
       target.saving = false;
-      if (version === state.detailVersion && state.authorized) button.disabled = false;
+      if (version === state.detailVersion && state.authorized) {button.disabled = false; $('extractLearning').disabled = false;}
     }
   }
+  function showExtractionUsage(usage) {
+    if (!usage) return;
+    const n = value => Number.isFinite(value) ? value.toLocaleString('ja-JP') : '不明';
+    $('extractionUsage').textContent = '入力 ' + n(usage.generation?.input) + ' / 出力 ' + n(usage.generation?.output) + ' トークン（思考分を含む） · 推定API料金 ' + (Number.isFinite(usage.estimatedUsd) ? '$' + usage.estimatedUsd.toFixed(6) : '不明') + '（既存単価による概算） · ' + (usage.recorded ? '利用ログ記録済み' : '利用ログは未記録') + ' · 記録ID: ' + (usage.eventIds?.join(', ') || 'なし');
+  }
+  async function extractLearning(button) {
+    const target = detail, version = state.detailVersion;
+    if (!target || target.action !== 'candidate' || target.extracting || target.saving) return;
+    const input = $('learningText'), initialText = input.value;
+    target.extracting = true; button.disabled = true; $('saveLearning').disabled = true;
+    $('applyExtraction').disabled = true;
+    $('detailStatus').textContent = '学びを抽出しています…（保存はしません）';
+    $('extractionUsage').textContent = '';
+    try {
+      const result = await api('extract_candidate', {}, {id:target.id});
+      if (version !== state.detailVersion || !state.authorized) return;
+      showExtractionUsage(result.usage);
+      if (result.noCandidate) {
+        $('detailStatus').textContent = '学習候補なし。入力内容は変更していません。';
+        return;
+      }
+      if (!input.value.trim() && input.value === initialText) {
+        input.value = result.text; target.previewText = null; $('extractionPreview').hidden = true;
+        $('detailStatus').textContent = '抽出結果を入力しました（未保存）。根拠を確認・修正して「学びを保存」を押してください。';
+      } else {
+        target.previewText = result.text;
+        $('extractionText').textContent = result.text; $('extractionPreview').hidden = false;
+        $('detailStatus').textContent = '入力内容を残し、抽出結果をプレビューに表示しました（未保存）。';
+      }
+    } catch (error) {
+      if (version !== state.detailVersion || !state.authorized) return;
+      showExtractionUsage(error.usage);
+      $('detailStatus').textContent = error.message;
+    } finally {
+      target.extracting = false;
+      if (version === state.detailVersion && state.authorized) {
+        button.disabled = false; $('saveLearning').disabled = false; $('applyExtraction').disabled = false;
+      }
+    }
+  }
+  function applyExtraction() {
+    if (!detail?.previewText || detail.extracting || detail.saving) return;
+    if ($('learningText').value.trim() && !confirm('入力中の「残したい学び」を抽出結果で置き換えますか？まだ保存はされません。')) return;
+    $('learningText').value = detail.previewText;
+    detail.previewText = null; $('extractionPreview').hidden = true;
+    $('detailStatus').textContent = '入力欄に反映しました（未保存）。確認・修正して「学びを保存」を押してください。';
+  }
   function hasUnsavedLearning() {
-    return detail?.action === 'candidate' && $('learningText') && ($('learningText').value !== detail.savedText || detail.saving);
+    return detail?.action === 'candidate' && $('learningText') && ($('learningText').value !== detail.savedText || detail.saving || detail.extracting || detail.previewText);
   }
   function closeDetail() {
-    if (hasUnsavedLearning() && !confirm('保存中、または未保存の変更があります。閉じてもよいですか？')) return;
+    if (hasUnsavedLearning() && !confirm('処理中、または未保存の学び・抽出プレビューがあります。閉じてもよいですか？')) return;
     $('detail').close();
   }
   async function saveCandidate(button) {
@@ -207,6 +254,8 @@
     if(button.dataset.lineChat)openDetail('line_conversation',button.dataset.lineChat);
     if(button.dataset.candidate&&state.authorized)openDetail('candidate',button.dataset.candidate);
     if(button.id==='saveLearning'&&state.authorized)saveLearning(button);
+    if(button.id==='extractLearning'&&state.authorized)extractLearning(button);
+    if(button.id==='applyExtraction'&&state.authorized)applyExtraction();
     if(button.dataset.book)openDetail('book',button.dataset.book);
     if(button.dataset.source&&state.page==='logs'){state.logSource=button.dataset.source;state.offset=0;renderPage();}
     if(button.id==='saveCandidate'&&state.authorized)saveCandidate(button);
