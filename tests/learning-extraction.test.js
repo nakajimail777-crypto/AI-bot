@@ -33,6 +33,8 @@ test('analyzes only server-owned original text with dedicated prompt, returns un
  assert.equal(res.code,200);assert.equal(res.data.text,draft);assert.equal(res.data.noCandidate,false);
  const request=JSON.parse(calls.find(call=>call.url.includes(':generateContent')).options.body);
  assert.deepEqual(request.systemInstruction.parts,[{text:LEARNING_EXTRACTION_PROMPT}]);
+ assert.match(request.systemInstruction.parts[0].text,/良い対応/);
+ assert.match(request.systemInstruction.parts[0].text,/単なる一般論/);
  assert.equal(request.contents.length,1);assert.match(request.contents[0].parts[0].text,/うれしいな/);
  assert.ok(!JSON.stringify(request).includes('forged'));
  assert.ok(calls.every(call=>!call.url.includes('ai_personas')&&!call.url.includes('knowledge_')&&!call.url.includes('ai_modes')));
@@ -43,6 +45,11 @@ test('analyzes only server-owned original text with dedicated prompt, returns un
  const event=JSON.parse(calls.find(call=>call.url.includes('api_usage_events')).options.body)[0];
  assert.equal(event.user_id,null);assert.equal(event.conversation_id,null);
  assert.equal(event.category,'generation');assert.ok(!JSON.stringify(event).includes('うれしいな'));
+});
+test('dedicated prompt reserves no-candidate only for conversations with no grounded reusable principle',()=>{
+ assert.match(LEARNING_EXTRACTION_PROMPT,/明確な問題なし/);
+ assert.match(LEARNING_EXTRACTION_PROMPT,/4項目の形式/);
+ assert.match(LEARNING_EXTRACTION_PROMPT,/どちらも一つも見つからない場合だけ/);
 });
 test('no clear learning is a non-saving result',async()=>{
  const {res}=await invoke({ai:()=>json(generated('学習候補なし'))});
