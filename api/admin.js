@@ -1,3 +1,5 @@
+import { extractLearning } from '../lib/learning-extraction.js';
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LINE_HASH = /^[0-9a-f]{64}$/;
 const PAGE_SIZE = 25;
@@ -9,7 +11,7 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Vary', 'Authorization');
     const fail = (status, error) => res.status(status).json({error});
-    if (req.method !== 'GET' && !(req.method === 'POST' && ['save_candidate', 'update_candidate'].includes(req.query?.action))) {
+    if (req.method !== 'GET' && !(req.method === 'POST' && ['save_candidate', 'update_candidate', 'extract_candidate'].includes(req.query?.action))) {
       res.setHeader('Allow', 'GET');
       return fail(405, 'この画面では閲覧のみ利用できます。');
     }
@@ -29,10 +31,10 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
 
       const q = req.query || {};
       const action = q.action ?? 'summary';
-      if (!['summary', 'books', 'book', 'conversations', 'conversation', 'line_conversations', 'line_conversation', 'candidates', 'save_candidate', 'candidate', 'update_candidate'].includes(action)) return fail(400, '操作を確認してください。');
+      if (!['summary', 'books', 'book', 'conversations', 'conversation', 'line_conversations', 'line_conversation', 'candidates', 'save_candidate', 'candidate', 'update_candidate', 'extract_candidate'].includes(action)) return fail(400, '操作を確認してください。');
       if (['book', 'conversation', 'candidate'].includes(action) && (typeof q.id !== 'string' || !UUID.test(q.id))) return fail(400, '対象の指定が正しくありません。');
       if (action === 'line_conversation' && (typeof q.id !== 'string' || !LINE_HASH.test(q.id))) return fail(400, '対象の指定が正しくありません。');
-      if (['save_candidate', 'update_candidate'].includes(action) && req.method !== 'POST') return fail(405, 'POSTで保存してください。');
+      if (['save_candidate', 'update_candidate', 'extract_candidate'].includes(action) && req.method !== 'POST') return fail(405, 'POSTで保存してください。');
       const offsetText = q.offset ?? '0';
       if (typeof offsetText !== 'string' || !/^(0|[1-9]\d{0,6})$/.test(offsetText)) return fail(400, 'ページの指定が正しくありません。');
       const offset = Number(offsetText);
@@ -53,6 +55,18 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
         return Number(total);
       }
       const page = (rows, size) => ({items: rows.slice(0, size), nextOffset: rows.length > size ? offset + size : null});
+      if (action === 'extract_candidate') {
+        const {id} = req.body || {};
+        if (typeof id !== 'string' || !UUID.test(id)) return fail(400, '学習候補の指定が正しくありません。');
+        const rows = await read(`learning_items?id=eq.${id}&select=original_text&limit=1`);
+        if (!rows.length) return fail(404, '学習候補が見つかりません。');
+        try {
+          const result = await extractLearning({originalText:rows[0].original_text, env, fetcher, now});
+          return res.status(200).json(result);
+        } catch (error) {
+          return res.status(error.status || 503).json({error:error.message, ...(error.usage ? {usage:error.usage} : {})});
+        }
+      }
       if (action === 'candidate') {
         const rows = await read(`learning_items?id=eq.${q.id}&select=id,original_text,learning_text,status,created_at,updated_at&limit=1`);
         if (!rows.length) return fail(404, '学習候補が見つかりません。');
