@@ -153,3 +153,13 @@ test('encouragement applies once, records opt-in, and rejects invalid flags',asy
 test('invalid emotion focus payload is rejected before external calls',async()=>{
  const s=setup();assert.equal((await s.invoke({body:{message:'test',conversationId:chat,requestId:request,emotionFocus:'injection'}})).code,400);assert.equal(s.calls.length,0);
 });
+test('return path applies once, records opt-in, and leaves no inherited pressure',async()=>{
+ const s=setup();assert.equal((await s.invoke({body:{message:'ホームページを直したいけど、今日はもういいや',conversationId:chat,requestId:request,returnPath:true}})).code,200);
+ const generated=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+ assert.match(generated.systemInstruction.parts[0].text,/今回の返答だけ：戻れる逃げ道/);
+ assert.match(generated.systemInstruction.parts[0].text,/質問は最大一つ/);
+ assert.match(JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message,/［戻れる逃げ道］/);
+ const next=setup({history:[{role:'user',content:'今日はもういいや\n\n［戻れる逃げ道］',sequence:1}]});await next.invoke();
+ assert.match(JSON.parse(next.calls.find(c=>c.url.includes(':generateContent')).init.body).systemInstruction.parts[0].text,/戻れる逃げ道の終了/);
+ const invalid=setup();assert.equal((await invalid.invoke({body:{message:'test',conversationId:chat,requestId:request,returnPath:'override'}})).code,400);assert.equal(invalid.calls.length,0);
+});

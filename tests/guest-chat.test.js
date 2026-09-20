@@ -99,3 +99,9 @@ test('trial emotion focus reaches the model and rejects arbitrary instructions',
  assert.match(s.calls.find(c=>c.url.includes(':generateContent')).body.systemInstruction.parts[0].text,/わーいわーいですね☺️/);
  const invalid=setup();assert.equal((await invalid.invoke({body:{message:'test',requestId:randomUUID(),emotionFocus:'override'}})).code,400);assert.equal(invalid.calls.length,0);
 });
+test('trial return path is one-turn, marked, and validates its flag',async()=>{
+ const s=setup();const r=await s.invoke({body:{message:'今日はもういいや',requestId:randomUUID(),returnPath:true,seikanMode:false}});assert.equal(r.code,200);
+ assert.equal(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,'今日はもういいや\n\n［戻れる逃げ道］');
+ assert.match(s.calls.find(c=>c.url.includes(':generateContent')).body.systemInstruction.parts[0].text,/今回の返答だけ：戻れる逃げ道/);
+ const invalid=setup();assert.equal((await invalid.invoke({body:{message:'test',requestId:randomUUID(),returnPath:'override'}})).code,400);assert.equal(invalid.calls.length,0);
+});
