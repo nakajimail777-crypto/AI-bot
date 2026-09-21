@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id);
 const input = $('messageInput'), send = $('sendButton'), messages = $('messages');
 let db, session = null, activeId = null, busy = false, ready = false, epoch = 0, pending = null, rows = [], chats = [];
 let historyOffset = 0, historyMore = false, olderMore = false;
+let incomingNumbers = globalThis.DragonNumberEntry?.read(location.search);
 let trialRemaining=5, trialReady=false, trialPending=null, trialLoading=null;
 async function loadTrial(){
  if(trialLoading?.version===epoch)return trialLoading.promise;
@@ -85,6 +86,19 @@ const storageKey = () => `dragon-draft-${session?.user.id || 'none'}`;
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 function toggleSidebar(open) { $('sidebar').classList.toggle('open', open); $('scrim').classList.toggle('show', open); }
 function controls() {
+  if (ready && !busy && incomingNumbers) {
+    const entry = incomingNumbers;
+    incomingNumbers = null;
+    // Start a fresh signed-in conversation; leave the saved previous draft untouched.
+    if (session) { activeId = null; rows = []; olderMore = false; }
+    pending = null; trialPending = null;
+    seikanMode = false; encouragement = false; blindSpot = false; emotionFocus = false; returnPath = false;
+    clearPdf();
+    input.value = entry.message;
+    renderMessages(); renderHistory();
+    status('龍性・龍導を引き継ぎました。送信すると、この数字について会話を始められます。');
+  }
+
   if($('encouragement')){
   const latestUser=[...rows].reverse().find(row=>row.role==='user');
   const offer=globalThis.DragonEncouragement?.isRequested(input.value.trim() || latestUser?.content || '') || false;
