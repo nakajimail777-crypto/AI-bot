@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>本棚の反映 | スピリットドラゴンAI</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#171717;color:#eee;font-family:system-ui,sans-serif}
+    main{width:min(520px,calc(100% - 32px));padding:32px;background:#222;border:1px solid #444;border-radius:18px;text-align:center}
+    button{padding:13px 22px;border:0;border-radius:10px;font:inherit;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait} p{color:#bbb;line-height:1.7}.ok{color:#a7f3d0}.error{color:#fca5a5}
+  </style>
+</head>
+<body><main>
+  <h1>知識の本棚を反映</h1>
+  <p>下のボタンで、準備中の本をスピリットドラゴンAIが読める状態にします。</p>
+  <button id="sync">本棚を反映する</button>
+  <p id="status"></p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const button=document.getElementById('sync'), status=document.getElementById('status');
+button.onclick=async()=>{
+  button.disabled=true;status.className='';status.textContent='反映しています…';
+  try{
+    const config=await fetch('/api/config').then(r=>r.json());
+    const db=supabase.createClient(config.url,config.publishableKey);
+    const {data}=await db.auth.getSession();
+    if(!data.session)throw new Error('先にチャット画面でログインしてください。');
+    const response=await fetch('/api/bookshelf-sync',{method:'POST',headers:{Authorization:`Bearer ${data.session.access_token}`}});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.error||'反映できませんでした。');
+    status.className='ok';status.textContent=result.synced?`${result.synced}冊を反映しました。`: '本棚はすでに最新です。';
+  }catch(error){status.className='error';status.textContent=error.message;}
+  finally{button.disabled=false;}
+};
+</script></body></html>
