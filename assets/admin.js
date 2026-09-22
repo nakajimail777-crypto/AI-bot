@@ -73,7 +73,7 @@
         const result = await api('candidates',{offset:state.offset});
         if (version !== state.version) return;
         state.nextOffset = result.nextOffset;
-        html = heading('会話ログから手動で保存した候補です。','<button id="refresh">更新</button>') + '<section class="panel"><div class="table-wrap"><table class="table"><thead><tr><th>作成日時</th><th>会話本文の冒頭</th><th>状態</th><th>操作</th></tr></thead><tbody>' + result.items.map(item => `<tr><td>${date(item.created_at)}</td><td>${escapeHtml(item.original_text)}</td><td>${item.bookshelf_document_id ? '本棚に登録済み' : '確認待ち'}</td><td><button data-candidate="${escapeHtml(item.id)}">全文・学びを編集</button></td></tr>`).join('') + '</tbody></table>' + (result.items.length ? '' : '<p class="empty">学習候補はまだありません。</p>') + '</div></section>' + pagination();
+        html = heading('会話ログから手動で保存した候補です。','<button id="refresh">更新</button>') + '<section class="panel"><div class="table-wrap"><table class="table"><thead><tr><th>作成日時</th><th>会話本文の冒頭</th><th>状態</th><th>操作</th></tr></thead><tbody>' + result.items.map(item => `<tr><td>${date(item.created_at)}</td><td>${escapeHtml(item.original_text)}</td><td>${item.knowledge_documents?.metadata?.shelf_removed ? '取り出し済み' : item.bookshelf_document_id ? '本棚に登録済み' : '確認待ち'}</td><td><button data-candidate="${escapeHtml(item.id)}">全文・学びを編集</button></td></tr>`).join('') + '</tbody></table>' + (result.items.length ? '' : '<p class="empty">学習候補はまだありません。</p>') + '</div></section>' + pagination();
       }
       if (version !== state.version || !state.authorized) return;
       $('view').innerHTML = html;
@@ -95,13 +95,14 @@
       if (target.action === 'candidate') {
         const item = result.candidate;
         target.savedText = item.learning_text || '';
-        target.updatedAt = item.updated_at; target.adopted = Boolean(item.bookshelf_document_id);
+        target.updatedAt = item.updated_at; target.adopted = Boolean(item.bookshelf_document_id) && !item.knowledge_documents?.metadata?.shelf_removed;
         $('dialogTitle').textContent = '学習候補の編集';
         $('dialogBody').innerHTML = '<p class="hint" id="candidateMeta"></p><h3>元の会話（全文）</h3><div class="message candidate-original"><p id="candidateOriginal"></p></div><div class="actions"><button id="extractLearning">この会話から学びを抽出</button></div><p class="hint">元会話をAIで分析します。結果は下書きです。確認・修正してから保存してください。抽出・保存だけでは本棚に入りません。採用するとAIの回答に使われます。</p><p id="extractionUsage" class="hint" role="status"></p><section id="extractionPreview" hidden><h3>抽出結果のプレビュー（未保存）</h3><div class="message"><p id="extractionText"></p></div><button id="applyExtraction">残したい学びに反映</button></section><label for="learningText">残したい学び</label><p class="hint" id="learningHelp">会話から残したい内容を自分の言葉でまとめてください。元の会話本文は変更されません。20,000文字以内。</p><textarea id="learningText" rows="8" maxlength="20000" aria-describedby="learningHelp"></textarea><div class="actions"><button id="saveLearning">学びを保存</button><button id="adoptLearning" class="primary">採用して本棚に入れる</button></div><p class="hint">採用前に、個人情報や会話固有の事情を除き、他の対話でも使える内容か確認してください。元の会話は本棚に登録しません。</p>';
         $('candidateMeta').textContent = '作成：' + date(item.created_at) + ' · 更新：' + date(item.updated_at);
         $('candidateOriginal').textContent = item.original_text;
         $('learningText').value = target.savedText;
         $('adoptLearning').disabled = target.adopted;
+        if(item.knowledge_documents?.metadata?.shelf_removed)$('adoptLearning').textContent='もう一度本棚に入れる';
         if(target.adopted){$('adoptLearning').textContent='本棚に登録済み'; $('learningText').readOnly=true; $('saveLearning').disabled=true; $('extractLearning').disabled=true;}
         $('detailStatus').textContent = '';
         $('detailMore').hidden = true;
