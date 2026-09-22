@@ -13,8 +13,8 @@
 </head>
 <body><main>
   <h1>知識の本棚を反映</h1>
-  <p>下のボタンで、準備中の本をスピリットドラゴンAIが読める状態にします。</p>
-  <button id="sync">本棚を反映する</button>
+  <p>学習候補は管理画面で確認・保存し、「採用して本棚に入れる」を押してください。</p>
+  <p><a href="/admin.html" style="color:#a7f3d0">管理画面で学習候補を確認する →</a></p><details><summary>以前保存した資料の反映</summary><p>検索準備が未完了の資料に使う補助機能です。管理者のみ利用できます。</p><button id="sync">未反映の資料を反映する</button></details>
   <p id="status"></p>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -27,7 +27,7 @@ button.onclick=async()=>{
     const db=supabase.createClient(config.url,config.publishableKey);
     const {data}=await db.auth.getSession();
     if(!data.session)throw new Error('先にチャット画面でログインしてください。');
-    const response=await fetch('/api/bookshelf-sync',{method:'POST',headers:{Authorization:`Bearer ${data.session.access_token}`}});
+    const response=await fetch('/api/bookshelf-sync',{method:'POST',body:JSON.stringify({action:'sync_pending'}),headers:{'Content-Type':'application/json',Authorization:`Bearer ${data.session.access_token}`}});
     const result=await response.json();
     if(!response.ok)throw new Error(result.error||'反映できませんでした。');
     status.className='ok';status.textContent=result.synced?`${result.synced}冊を反映しました。`: '本棚はすでに最新です。';
