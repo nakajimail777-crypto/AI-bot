@@ -28,7 +28,7 @@ export function prepareMarkdown(name, text) {
   return {title,chunks:chunks.map(content=>`資料名：${title}\n\n${content}`)};
 }
 
-async function createChunks(chunks, title, { embedder, fetcher, key }) {
+export async function createChunks(chunks, title, { embedder, fetcher, key }) {
   const result = [];
   for (let index = 0; index < chunks.length; index += EMBEDDING_CONCURRENCY) {
     const group = chunks.slice(index, index + EMBEDDING_CONCURRENCY);
