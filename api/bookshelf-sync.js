@@ -32,7 +32,11 @@ export function createBookshelfSyncHandler({ fetcher = fetch, env = process.env,
         const candidate=rows?.[0];
         if(!candidate) throw new HttpError(404,'学習候補が見つかりません。');
         if(candidate.updated_at!==expected_updated_at) throw new HttpError(409,'候補が更新されています。開き直して内容を確認してください。');
-        if(candidate.bookshelf_document_id) return res.status(200).json({id:candidate.bookshelf_document_id,alreadyAdopted:true});
+        if(candidate.bookshelf_document_id) {
+          const books=await db('/rest/v1/knowledge_documents?id=eq.'+candidate.bookshelf_document_id+'&select=id,metadata');
+          if(!books?.length) throw new HttpError(409,'資料が見つかりません。管理者に確認してください。');
+          if(!books[0].metadata?.shelf_removed) return res.status(200).json({id:candidate.bookshelf_document_id,alreadyAdopted:true});
+        }
         if(!candidate.learning_text?.trim()) throw new HttpError(400,'残したい学びを入力し、先に保存してください。');
         const title=candidate.learning_text.trim().split('\n')[0].replace(/^#+\s*/, '').slice(0,100);
         const note=prepareMarkdown('学習候補.md',candidate.learning_text);

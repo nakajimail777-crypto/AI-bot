@@ -68,7 +68,7 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
         }
       }
       if (action === 'candidate') {
-        const rows = await read(`learning_items?id=eq.${q.id}&select=id,original_text,learning_text,status,created_at,updated_at,bookshelf_document_id,adopted_at&limit=1`);
+        const rows = await read(`learning_items?id=eq.${q.id}&select=id,original_text,learning_text,status,created_at,updated_at,bookshelf_document_id,adopted_at,knowledge_documents(metadata)&limit=1`);
         if (!rows.length) return fail(404, '学習候補が見つかりません。');
         return res.status(200).json({candidate:rows[0]});
       }
@@ -87,7 +87,7 @@ export function createAdminHandler({env = process.env, fetcher = fetch, now = ()
         return res.status(200).json({candidate:rows[0]});
       }
       if (action === 'candidates') {
-        const rows = await read(`learning_items?select=id,created_at,original_text,status,bookshelf_document_id&order=created_at.desc,id.desc&limit=${PAGE_SIZE + 1}&offset=${offset}`);
+        const rows = await read(`learning_items?select=id,created_at,original_text,status,bookshelf_document_id,knowledge_documents(metadata)&order=created_at.desc,id.desc&limit=${PAGE_SIZE + 1}&offset=${offset}`);
         return res.status(200).json({...page(rows, PAGE_SIZE), items: rows.slice(0, PAGE_SIZE).map(row => ({...row, original_text: row.original_text.slice(0, 240)}))});
       }
       if (action === 'save_candidate') {
