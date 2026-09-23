@@ -1,4 +1,8 @@
 button:disabled { cursor: default; opacity: .45; }
+#memoriesDialog { max-height: 85dvh; overflow-y: auto; }
+.memory-item { border-bottom: 1px solid var(--line); padding: 12px 0; }
+.memory-item p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.memory-item small { display: block; margin-bottom: 8px; color: var(--muted); }
 .pdf-attachment { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 12px; padding:10px; border:1px solid var(--line); border-radius:10px; }
 .pdf-attachment #pdfName { flex:1; min-width:0; overflow-wrap:anywhere; font-size:14px; }
 .pdf-attachment small { flex-basis:100%; color:var(--muted); font-size:12px; line-height:1.5; }

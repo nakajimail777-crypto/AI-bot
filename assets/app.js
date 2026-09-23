@@ -129,12 +129,13 @@ function controls() {
   $('removePdf').disabled = busy;
   send.title = Date.now() < cooldownUntil ? `あと約${Math.ceil((cooldownUntil-Date.now())/1000)}秒で送信できます` : '';
   $('openUsage').hidden = !session;
+  document.querySelectorAll('.memory-delete,#moreMemories,#refreshMemories').forEach(b=>b.disabled=busy||!ready);
   input.disabled = busy || !ready || (!session&&(!trialReady||trialRemaining<=0));
   $('trialBanner').hidden=!!session;
   $('trialCount').textContent=trialRemaining>0?'ログインなしであと'+trialRemaining+'回お試しできます。':'お試しは終了しました。ログインして新しい会話を始めましょう。';
   $('newChat').disabled = busy || !ready || !session;
-  $('archiveChat').disabled = busy || !activeId;
-  $('archiveChat').hidden = !activeId;
+  $('rememberChat').disabled = busy || !ready || !activeId || !rows.length;
+  $('rememberChat').hidden = !activeId || !session || session.user.is_anonymous;
   $('copyChat').hidden = !session || !activeId;
   $('copyChat').disabled = busy || !ready || !rows.length;
   $('deleteChat').hidden = !session || !activeId;
@@ -143,7 +144,7 @@ function controls() {
   $('deleteAllChats').disabled = busy || !ready;
   $('manageChats').hidden = !session;
   $('manageChats').disabled = busy || !ready;
-  $('showArchivedChats').disabled = busy || !ready || !session;
+  $('showRememberedChats').disabled = busy || !ready || !session || session.user.is_anonymous;
   $('logout').disabled = busy;
   document.querySelectorAll('.history-item,.older,.archived-chat .plain-button').forEach(button => button.disabled = busy);
   input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight,160)+'px';
@@ -222,6 +223,7 @@ async function changeSession(next) {
   session=next;
   if(oldId!==nextId){seikanMode=false;encouragement=false;blindSpot=false;emotionFocus=false;returnPath=false;}
   if(oldId===nextId){if(!next){ready=true;try{await loadTrial();}catch(error){status(error.message,true);}}controls();return;}
+  resetMemories();
   epoch++;const version=epoch;clearPdf();ready=false;activeId=null;rows=[];chats=[];pending=null;input.value='';historyMore=false;olderMore=false;
   usageVersion++; usageCache.clear(); cooldownUntil=0; $('usageDialog').close(); $('usageScope').value='self'; $('usageScopeLabel').hidden=true; $('usageMonthly').textContent='';
   clearPdfDownload();deleteTarget=null;archivedChats=[];$('deleteDialog').close();$('manageDialog').close();$('archivedDialog').close();$('pdfDialog').close();$('pdfPreview').src='about:blank';
@@ -249,6 +251,45 @@ async function changeSession(next) {
   }catch{if(version===epoch)status('履歴の読み込みに失敗しました。ページを再読み込みしてください。',true);}
   finally{if(version===epoch){ready=true;controls();}}
 }
+let memoryRows=[];
+function resetMemories(){rememberedConversation=null;memoryRows=[];$('memoriesDialog').close();$('memoryList').replaceChildren();$('memoryStatus').textContent='';$('moreMemories').hidden=true;}
+function renderMemories(){
+  const list=$('memoryList');list.replaceChildren();
+  for(const item of memoryRows){
+    const article=document.createElement('article');article.className='memory-item';
+    const text=document.createElement('p');text.textContent=item.content;
+    const date=document.createElement('small');date.textContent=new Date(item.created_at).toLocaleString('ja-JP');
+    const remove=document.createElement('button');remove.type='button';remove.className='plain-button danger memory-delete';remove.textContent='削除';
+    const owner=session.user.id,version=epoch;
+    remove.onclick=()=>{
+      if(busy||version!==epoch||!confirm('この記憶を削除しますか？ 会話の発言は残ります。'))return;
+      run(async()=>{
+        try{
+          await DragonMemories.remove(db,owner,item.id);
+          if(version!==epoch)return;
+          memoryRows=memoryRows.filter(row=>row.id!==item.id);renderMemories();$('memoryStatus').textContent='記憶を削除しました。';
+        }catch(error){if(version===epoch)$('memoryStatus').textContent=error.message;}
+      });
+    };
+    article.append(text,date,remove);list.append(article);
+  }
+}
+async function loadMemories(more=false){
+  if(!session||session.user.is_anonymous)return;
+  const version=epoch,owner=session.user.id;
+  $('memoryStatus').textContent='読み込んでいます…';
+  try{
+    const data=await DragonMemories.list(db,owner,more?memoryRows.length:0);
+    if(version!==epoch)return;
+    memoryRows=more?[...memoryRows,...data]:data;renderMemories();
+    $('moreMemories').hidden=data.length<30;
+    $('memoryStatus').textContent=memoryRows.length?'':'保存した記憶はまだありません。';
+  }catch(error){if(version===epoch)$('memoryStatus').textContent=error.message;}
+}
+$('closeMemories').onclick=()=>$('memoriesDialog').close();
+$('refreshMemories').onclick=()=>run(()=>loadMemories());
+$('moreMemories').onclick=()=>run(()=>loadMemories(true));
+
 $('composer').addEventListener('submit',event=>{
   event.preventDefault();if(busy||pdfReading||(!input.value.trim()&&!attachedPdf)||Date.now()<cooldownUntil)return;
   run(async()=>{
@@ -310,13 +351,19 @@ $('pdfInput').addEventListener('change',async()=>{
   }catch(error){if(version===pdfVersion)status(error.message,true);}
   finally{if(version===pdfVersion){pdfReading=false;$('pdfInput').value='';controls();}}
 });
-input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('composer').requestSubmit();}});
+// Enter inserts a newline; sending is an explicit button action.
 $('newChat').onclick=()=>{if(busy)return;encouragement=false;blindSpot=false;emotionFocus=false;returnPath=false;clearPdf();activeId=null;rows=[];pending=null;input.value='';olderMore=false;rememberDraft();renderMessages();renderHistory();status('');toggleSidebar(false);input.focus();};
-$('archiveChat').onclick=()=>run(async()=>{
-  if(!activeId)return;
-  const {error}=await db.from('conversations').update({archived_at:new Date().toISOString()}).eq('id',activeId);
-  if(error)throw new Error('会話を非表示にできませんでした。');
-  encouragement=false;returnPath=false;clearPdf();activeId=null;rows=[];pending=null;input.value='';olderMore=false;rememberDraft();renderMessages();await loadHistory();status('会話を非表示にしました。');
+let rememberedConversation=null;
+$('rememberChat').onclick=()=>run(async()=>{
+  if(!activeId||!session||session.user.is_anonymous)return;
+  const version=epoch,conversationId=activeId,owner=session.user.id;
+  status('会話を記憶に保存しています…');
+  const content=await DragonMemories.conversation(db,owner,conversationId);
+  if(version!==epoch||conversationId!==activeId)return;
+  if(!rememberedConversation||rememberedConversation.owner!==owner||rememberedConversation.conversationId!==conversationId||rememberedConversation.content!==content)
+    rememberedConversation={owner,conversationId,content,id:crypto.randomUUID()};
+  await DragonMemories.save(db,owner,rememberedConversation.id,content);
+  if(version===epoch)status('この会話を記憶に保存しました。記憶一覧で確認・削除できます。');
 });
 $('profile').onclick=()=>{if(!session)$('authDialog').showModal();};
 async function openDelete(all) {
@@ -386,12 +433,10 @@ function renderArchivedChats() {
     row.append(title,restore);list.append(row);
   }
 }
-$('showArchivedChats').onclick=()=>run(async()=>{
-  const version=epoch;$('manageStatus').textContent='非表示の会話を読み込んでいます…';
-  const {data,error}=await db.from('conversations').select('id,title,updated_at,archived_at').eq('user_id',session.user.id).not('archived_at','is',null).order('archived_at',{ascending:false}).limit(100);
-  if(error)throw new Error('非表示の会話を読み込めませんでした。もう一度お試しください。');
-  if(version!==epoch)return;
-  archivedChats=data||[];renderArchivedChats();$('manageStatus').textContent='';$('manageDialog').close();$('archivedDialog').showModal();
+$('showRememberedChats').onclick=()=>run(async()=>{
+  if(!session||session.user.is_anonymous)return;
+  $('manageDialog').close();toggleSidebar(false);
+  $('memoriesDialog').showModal();await loadMemories();
 });
 async function refreshUsage() {
   if(!session)return;
