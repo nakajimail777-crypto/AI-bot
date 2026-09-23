@@ -6,11 +6,12 @@ test('adoption is atomic, revision checked, idempotent and service-only',async()
  const db=new PGlite();
  try {
  await db.exec(`create role anon;create role authenticated;create role service_role;
- create table knowledge_documents(id uuid primary key,title text);
+ create table knowledge_documents(id uuid primary key,title text,metadata jsonb);
  create table learning_items(id uuid primary key,learning_text text,updated_at timestamptz);
  create function register_knowledge_document(uuid,text,text,jsonb,jsonb) returns void language plpgsql as $$ begin
- insert into public.knowledge_documents values($1,$2); if $5='[]'::jsonb then raise exception 'CHUNKS_FAILED';end if; end; $$;`);
+ insert into public.knowledge_documents values($1,$2,$4) on conflict(id) do update set title=excluded.title,metadata=excluded.metadata; if $5='[]'::jsonb then raise exception 'CHUNKS_FAILED';end if; end; $$;`);
  await db.exec(await readFile(new URL('../supabase/migrations/20260922_adopt_learning.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../supabase/migrations/20260923_restore_learning.sql',import.meta.url),'utf8'));
  const id='11111111-1111-4111-8111-111111111111',stamp='2026-09-22T00:00:00Z';
  await db.query('insert into learning_items values($1,$2,$3,null,null)',[id,'学び',stamp]);
  const sql='select adopt_learning_item($1,$2,$3,$4) as result';
@@ -25,5 +26,13 @@ test('adoption is atomic, revision checked, idempotent and service-only',async()
  const retry=(await db.query(sql,[id,stamp,'題名',[{}]])).rows[0].result;
  assert.equal(first.id,retry.id);assert.equal(retry.alreadyAdopted,true);
  await db.exec('reset role');assert.equal((await db.query('select count(*)::int n from knowledge_documents')).rows[0].n,1);
+ await db.query('update knowledge_documents set metadata=$1',[{shelf_removed:true}]);
+ await db.exec('set role service_role');
+ await assert.rejects(db.query(sql,[id,stamp,'改訂',[]]),/CHUNKS_FAILED/);
+ const restored=(await db.query(sql,[id,stamp,'改訂',[{}]])).rows[0].result;
+ assert.equal(restored.id,first.id);assert.equal(restored.alreadyAdopted,false);
+ await db.exec('reset role');
+ const book=(await db.query('select * from knowledge_documents')).rows;
+ assert.equal(book.length,1);assert.equal(book[0].metadata.shelf_removed,false);assert.equal(book[0].title,'改訂');
  } finally {await db.close();}
 });
