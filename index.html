@@ -422,7 +422,7 @@
           <span>スピリットドラゴンAI</span><span class="model-sub"></span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <button id="archiveChat" class="plain-button chat-actions" type="button" hidden>会話を非表示</button>
+        <button id="rememberChat" class="plain-button chat-actions" type="button" title="この会話全体を記憶に保存" hidden>会話を覚える</button>
         <button id="copyChat" class="plain-button" type="button" hidden>会話をコピー</button>
         <button id="deleteChat" class="plain-button" type="button" hidden>会話を削除</button>
       </header>
@@ -481,8 +481,8 @@
       <p>会話を手元に残せます。保存しても会話は消えません。</p>
     </div>
     <div class="management-archive">
-      <button id="showArchivedChats" class="plain-button" type="button">非表示の会話を見る</button>
-      <p>非表示にした会話を確認し、一覧へ戻せます。</p>
+      <button id="showRememberedChats" class="plain-button" type="button">覚えた会話を見る</button>
+      <p>「会話を覚える」で保存した内容を確認・削除できます。</p>
     </div>
     <div class="management-delete">
       <p>保存した会話を削除します。次の画面で件数を確認できます。</p>
@@ -548,6 +548,18 @@
   <script defer src="/assets/pdf-download.js"></script>
   <script defer src="/assets/encouragement.js"></script>
   <script defer src="/assets/ryuhijutsu-entry.js"></script>
-<script defer src="/assets/app.js"></script>
+  <dialog id="memoriesDialog" class="auth-dialog" aria-labelledby="memoriesTitle">
+    <h2 id="memoriesTitle">記憶一覧</h2>
+    <p>「会話を覚える」を押した時点の会話全体を保存します。今はAIの返答には使いません。</p>
+    <div id="memoryList"></div>
+    <p id="memoryStatus" role="status"></p>
+    <div class="dialog-actions">
+      <button id="moreMemories" class="plain-button" type="button" hidden>さらに表示</button>
+      <button id="refreshMemories" class="plain-button" type="button">更新</button>
+      <button id="closeMemories" class="plain-button" type="button">閉じる</button>
+    </div>
+  </dialog>
+  <script defer src="/assets/memories.js"></script>
+  <script defer src="/assets/app.js"></script>
 </body>
 </html>
