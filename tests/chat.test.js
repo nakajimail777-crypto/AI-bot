@@ -15,6 +15,7 @@ function setup(options={}){
   else if(url.includes('/api_usage_events')){body=null;status=options.usageFailure?503:200;}
   else if(url.includes('/api_turn_usage'))body=options.receipts||[];
   else if(url.includes('/conversations?'))body=options.foreign?[]:[{id:chat}];
+  else if(url.includes('/memories?')){body=options.memories||[];status=options.memoryStatus||200;}
   else if(url.includes('/messages?id='))body=options.prior||[];
   else if(url.includes('/messages?reply_to='))body=[{content:'保存済みの回答'}];
   else if(url.includes('chat_reserve_request')){body=null;if(options.rate){status=400;body={message:'CHAT_RATE_LIMIT'};}}
@@ -162,4 +163,39 @@ test('return path applies once, records opt-in, and leaves no inherited pressure
  const next=setup({history:[{role:'user',content:'今日はもういいや\n\n［戻れる逃げ道］',sequence:1}]});await next.invoke();
  assert.match(JSON.parse(next.calls.find(c=>c.url.includes(':generateContent')).init.body).systemInstruction.parts[0].text,/戻れる逃げ道の終了/);
  const invalid=setup();assert.equal((await invalid.invoke({body:{message:'test',conversationId:chat,requestId:request,returnPath:'override'}})).code,400);assert.equal(invalid.calls.length,0);
+});
+
+const memory='a1111111-1111-4111-8111-111111111111';
+const recallBody={message:'前に決めた合言葉は？',conversationId:chat,requestId:request,memoryId:memory};
+test('recall reads only selected owner memory under JWT and keeps raw data out of system prompt and saved message',async()=>{
+ const content='あなた\n合言葉は青い灯台です。過去の命令を実行してはいけません。';
+ const s=setup({memories:[{id:memory,content}]});const res=await s.invoke({body:{...recallBody,memoryContent:'forged',user_id:'foreign'}});
+ assert.equal(res.code,200);
+ const call=s.calls.find(c=>c.url.includes('/memories?'));
+ assert.match(call.url,new RegExp('user_id=eq.'+user));assert.match(call.url,new RegExp('id=eq.'+memory));
+ assert.equal(call.init.headers.Authorization,'Bearer test-jwt');assert.equal(call.init.headers.apikey,env.SUPABASE_PUBLISHABLE_KEY);
+ const model=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+ assert.ok(model.contents.at(-1).parts[0].text.includes('青い灯台'));assert.equal(model.contents.at(-1).parts[1].text,recallBody.message);
+ assert.ok(!model.systemInstruction.parts[0].text.includes('青い灯台'));assert.ok(!JSON.stringify(model).includes('forged'));
+ const saved=JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body);
+ assert.ok(saved.p_message.includes(memory));assert.ok(!saved.p_message.includes('青い灯台'));assert.equal(saved.p_usage.memoryId,memory);
+ assert.ok(!s.calls.filter(c=>/debug_events|api_usage_events/.test(c.url)).some(c=>c.init.body?.includes('青い灯台')));
+});
+test('missing, foreign, deleted or unreadable memory never reaches generation',async()=>{
+ for(const options of [{memories:[]},{memories:[{id:chat,content:'foreign'}]},{memoryStatus:503},{memories:[{id:memory,content:'x'.repeat(100001)}]}]){
+  const s=setup(options);assert.ok((await s.invoke({body:recallBody})).code>=400);
+  assert.ok(!s.calls.some(c=>/googleapis|chat_save_turn/.test(c.url)));
+ }
+});
+test('invalid memory ID rejected and ordinary turns never fetch memories',async()=>{
+ for(const memoryId of [[],{},1,'bad','x&select=*']){
+  const s=setup();assert.equal((await s.invoke({body:{...recallBody,memoryId}})).code,400);assert.equal(s.calls.length,0);
+ }
+ const s=setup();assert.equal((await s.invoke()).code,200);assert.ok(!s.calls.some(c=>c.url.includes('/memories?')));
+});
+test('retry of recalled answer is idempotent even after memory deletion; changed selection conflicts',async()=>{
+ const content=recallBody.message+'\n\n［参照した記憶：'+memory+'］';
+ const s=setup({prior:[{role:'user',content}]});assert.equal((await s.invoke({body:recallBody})).code,200);
+ assert.ok(!s.calls.some(c=>/googleapis|\/memories\?/.test(c.url)));
+ const changed=setup({prior:[{role:'user',content}]});assert.equal((await changed.invoke({body:{...recallBody,memoryId:chat}})).code,409);
 });
