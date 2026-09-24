@@ -264,6 +264,10 @@ function renderMemories(){
   const list=$('memoryList');list.replaceChildren();
   for(const item of memoryRows){
     const article=document.createElement('article');article.className='memory-item';
+    const details=document.createElement('details');
+    const summary=document.createElement('summary');
+    const title=document.createElement('span');
+    title.textContent=item.content.replace(/^あなた\s*/, '').replace(/\s+/g,' ').slice(0,60)||'覚えた会話';
     const text=document.createElement('p');text.textContent=item.content;
     const date=document.createElement('small');date.textContent=new Date(item.created_at).toLocaleString('ja-JP');
     const remove=document.createElement('button');remove.type='button';remove.className='plain-button danger memory-delete';remove.textContent='削除';
@@ -286,7 +290,7 @@ function renderMemories(){
       $('memoriesDialog').close();rememberDraft();controls();input.focus();
       status('記憶を選びました。質問を入力して送信してください。');
     };
-    article.append(text,date,use,remove);list.append(article);
+    summary.append(title,date);details.append(summary,text,use,remove);article.append(details);list.append(article);
   }
 }
 async function loadMemories(more=false){
@@ -599,5 +603,4 @@ async function start(){
   }catch(error){status(error.message||'ログイン機能を読み込めませんでした。',true);}
 }
 start();
-
 
