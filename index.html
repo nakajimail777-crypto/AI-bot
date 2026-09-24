@@ -447,6 +447,11 @@
             <span id="pdfName"></span><button id="removePdf" class="plain-button" type="button" aria-label="添付PDFを外す">外す</button>
             <small>この会話の送信にPDFを添付します。原本は保存されません。再読み込み後は選び直してください。</small>
           </div>
+          <div id="recallSelection" class="pdf-attachment" hidden>
+            <span id="recallLabel"></span>
+            <button id="removeRecall" class="plain-button" type="button">記憶を外す</button>
+            <small>選んだ記憶を次の送信に添えます。AIの返答は会話履歴に残ります。</small>
+          </div>
           <textarea id="messageInput" rows="1" placeholder="メッセージを入力" aria-label="メッセージ" maxlength="4000" disabled></textarea>
           <div class="composer-actions">
             <button id="attachPdf" class="attach-button" type="button" aria-label="PDFを添付（3MBまで）" title="PDFを添付（1ファイル・3MBまで）" disabled>
@@ -550,7 +555,7 @@
   <script defer src="/assets/ryuhijutsu-entry.js"></script>
   <dialog id="memoriesDialog" class="auth-dialog" aria-labelledby="memoriesTitle">
     <h2 id="memoriesTitle">記憶一覧</h2>
-    <p>「会話を覚える」を押した時点の会話全体を保存します。今はAIの返答には使いません。</p>
+    <p>「会話を覚える」を押した時点の会話全体を保存します。「この記憶を使う」で、次の返答に使う記憶を1件選べます。</p>
     <div id="memoryList"></div>
     <p id="memoryStatus" role="status"></p>
     <div class="dialog-actions">
