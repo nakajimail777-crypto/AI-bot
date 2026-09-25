@@ -199,3 +199,21 @@ test('retry of recalled answer is idempotent even after memory deletion; changed
  assert.ok(!s.calls.some(c=>/googleapis|\/memories\?/.test(c.url)));
  const changed=setup({prior:[{role:'user',content}]});assert.equal((await changed.invoke({body:{...recallBody,memoryId:chat}})).code,409);
 });
+
+test('sky gazing overrides other selected modes and persists its marker',async()=>{
+ const s=setup();const res=await s.invoke({body:{message:'月がきれい',conversationId:chat,requestId:request,skyGazing:true,returnPath:true,seikanMode:true,emotionFocus:true}});
+ assert.equal(res.code,200);
+ const generated=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+ assert.match(generated.systemInstruction.parts[0].text,/現在の会話モード：空を眺める/);
+ assert.doesNotMatch(generated.systemInstruction.parts[0].text,/今回の返答だけ：戻れる逃げ道|現在の会話モード：静観|現在の会話モード：感情を感じきる/);
+ assert.equal(JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message,'月がきれい\n\n［空を眺める］');
+});
+test('sky gazing is explicitly reset when no longer selected',async()=>{
+ const s=setup({history:[{role:'user',content:'月\n\n［空を眺める］',sequence:1},{role:'assistant',content:'月ですね',sequence:2}]});
+ assert.equal((await s.invoke()).code,200);
+ assert.match(JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body).systemInstruction.parts[0].text,/空を眺める技の終了/);
+});
+test('invalid sky mode fails before authentication and generation',async()=>{
+ const s=setup();assert.equal((await s.invoke({body:{message:'x',conversationId:chat,requestId:request,skyGazing:'yes'}})).code,400);
+ assert.equal(s.calls.length,0);
+});
