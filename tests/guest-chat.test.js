@@ -105,3 +105,11 @@ test('trial return path is one-turn, marked, and validates its flag',async()=>{
  assert.match(s.calls.find(c=>c.url.includes(':generateContent')).body.systemInstruction.parts[0].text,/今回の返答だけ：戻れる逃げ道/);
  const invalid=setup();assert.equal((await invalid.invoke({body:{message:'test',requestId:randomUUID(),returnPath:'override'}})).code,400);assert.equal(invalid.calls.length,0);
 });
+
+test('guest sky gazing reaches Gemini and the reserved message',async()=>{
+ const s=setup();assert.equal((await s.invoke({body:{message:'月',requestId:randomUUID(),skyGazing:true,returnPath:true}})).code,200);
+ const model=s.calls.find(c=>c.url.includes(':generateContent')).body;
+ assert.match(model.systemInstruction.parts[0].text,/現在の会話モード：空を眺める/);
+ assert.doesNotMatch(model.systemInstruction.parts[0].text,/今回の返答だけ：戻れる逃げ道/);
+ assert.equal(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,'月\n\n［空を眺める］');
+});
