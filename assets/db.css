@@ -37,6 +37,7 @@ button:disabled { cursor: default; opacity: .45; }
 .chat-actions { margin-left: auto; }
 .account-actions { flex-wrap: wrap; }
 .logout-actions { border-top: 1px solid var(--line); padding-top: 12px; }
+.logout-actions .plain-button { flex: 1 1 0; min-width: 0; padding: 8px 6px; font-size: 12px; white-space: nowrap; }
 .management-save { padding: 8px 0 16px; }
 .management-delete { border-top: 1px solid #666; padding: 20px 0 12px; }
 .management-archive { border-top: 1px solid #666; padding: 20px 0 12px; }
@@ -76,6 +77,7 @@ button:disabled { cursor: default; opacity: .45; }
 #recallLabel { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
 .memory-use { margin-right: 8px; }
 
+.sky-gazing { font-size: 12px; padding: 7px 10px; }
 .sky-gazing[aria-pressed="true"] { background: #34334b; border-color: #b9afd9; color: #f0eaff; }
 .reply-waiting { max-width:760px; margin:0 auto; padding:8px 24px 24px; }
 .thinking-dots { width:40px; height:40px; border:1px solid var(--line); border-radius:50%; display:inline-flex; align-items:center; justify-content:center; gap:4px; }

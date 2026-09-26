@@ -182,8 +182,8 @@ function renderMessages() {
   if (!rows.length) {
     const welcome=document.createElement('div'); welcome.className='welcome';
     const inner=document.createElement('div'); inner.className='welcome-inner';
-    const h=document.createElement('h1'); h.textContent='心の声を、スピリットドラゴンに聞かせてください。';
-    const p=document.createElement('p'); p.textContent=session?'履歴からいつでも続けられます。':'ログインせずに5往復までお話しできます。静観モードもお試しください。';
+    const h=document.createElement('h1'); h.textContent='なんでもない話から、はじめよう。';
+    const p=document.createElement('p'); p.textContent=session?'考えごとも、思いつきも、今日見た空のことも。':'考えごとも、思いつきも、今日見た空のことも。ログインせずに5往復までお話しできます。';
     inner.append(h,p); welcome.append(inner); messages.append(welcome);
   }
   for (const row of rows) {
