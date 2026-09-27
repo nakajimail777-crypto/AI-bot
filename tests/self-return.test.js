@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {makeContext, validateDecision, decisionSchema, strategies, selfReturnReply, explicitBoundary, acceptableReply} from '../lib/self-return.js';
+import {makeContext, validateDecision, decisionSchema, strategies, selfReturnReply, explicitBoundary, acceptableReply, fallbackReply, questionRequested} from '../lib/self-return.js';
 import {createHandler} from '../lib/chat.js';
 import {createGuestHandler} from '../lib/guest-chat.js';
 const decision = (action='acknowledge_only', strategy='body_anchor') => ({scores:Object.fromEntries(strategies.map(key=>[key,0.5])),response_strategy:strategy,next_action:action,reason_summary:'本人が言葉にした感覚を受け止める。'});
@@ -23,13 +23,13 @@ test('quoted or negated refusal is not promoted into a hard boundary',()=>{
  for(const text of ['「考えたくない」と相手に言われた','考えたくないわけではない','ここまででいい、ではなく続きを話したい'])assert.equal(explicitBoundary(makeContext([],text)),null);
 });
 test('explicit refusal or closure overrides a conflicting high body score and skips further generation',async()=>{
- for(const text of ['もう考えたくない','深掘りしたくない','まだ分からないままでいい','ここまででいい','少し落ち着いた']){
+ for(const text of ['もう考えたくない','疲れた','深掘りしたくない','まだ分からないままでいい','ここまででいい','少し落ち着いた']){
   let calls=0;
   const reply=await selfReturnReply({message:text,apiKey:'test',fetcher:async()=>{calls++;return modelResponse(JSON.stringify(decision('ask_one')));}});
   assert.equal(calls,1);assert.doesNotMatch(reply,/[?？]|どうしたい|呼吸|身体|body_anchor/);
  }
 });
-test('two-stage call enforces schema; freeform rationale and scores never reach reply generation',async()=>{
+test('two-stage call enforces schema, suppresses unsolicited questions, and hides internal data',async()=>{
  const calls=[];
  const d=decision('ask_one','mixed_state');d.reason_summary='PRIVATE_REASON';
  const reply=await selfReturnReply({message:'AIに言われたから、そう思ってるだけかも',apiKey:'test',fetcher:async(url,init)=>{
@@ -37,7 +37,8 @@ test('two-stage call enforces schema; freeform rationale and scores never reach 
  }});
  assert.equal(calls.length,2);assert.deepEqual(calls[0].generationConfig.responseJsonSchema,decisionSchema);
  assert.doesNotMatch(JSON.stringify(calls[1].contents),/PRIVATE_REASON|scores/);
- assert.equal((reply.match(/？/g)||[]).length,1);assert.doesNotMatch(reply,/本音/);
+ assert.equal(JSON.parse(calls[1].contents[0].parts[0].text).guidance.next_action,'acknowledge_only');
+ assert.equal((reply.match(/[?？]/g)||[]).length,0);assert.match(reply,/私の言葉も.*横に置いて/);assert.doesNotMatch(reply,/本音/);
 });
 test('classification failures continue to a normal generation call',async()=>{
  for(const failure of ['timeout','http','json','schema']){
@@ -55,11 +56,27 @@ test('full outage fallback does not ask again about sensations, wishes, body ref
   assert.doesNotMatch(reply,/[?？]|呼吸|どうしたい|本音|スコア/);
  }
  const entry=await selfReturnReply({modeStart:true,fetcher:async()=>{throw Error('offline');}});
- assert.equal((entry.match(/？/g)||[]).length,1);
+ assert.equal((entry.match(/[?？]/g)||[]).length,0);assert.match(entry,/私の言葉も/);
 });
-test('reply boundary rejects internal JSON and multiple questions',()=>{
- for(const reply of ['{"scores":{}}','Gemini判定によると','どこですか？どうしたい？','これはあなたの本音です。'])assert.equal(acceptableReply(reply,'ask_one'),false);
+test('reply boundary rejects internal JSON, exploration prompts, and unsolicited questions',()=>{
+ for(const reply of ['{"scores":{}}','Gemini判定によると','どこですか？どうしたい？','これはあなたの本音です。','今、気になっていることはありますか？','何についてそう感じたのでしょうか？','何か浮かんできましたか？','あなたはどう思う？'])assert.equal(acceptableReply(reply,'ask_one'),false);
  assert.equal(acceptableReply('どうしたい？','close_gently'),false);
+ assert.equal(acceptableReply('答えなくても大丈夫です。今の呼吸は楽ですか？','ask_one',true),true);
+});
+test('questions require an explicit request in the latest user turn',()=>{
+ for(const text of ['質問して','一つだけ質問してください','問いかけをひとつお願い'])assert.equal(questionRequested(makeContext([],text)),true);
+ for(const text of ['AIに言われたからかも','何について考えればいい？','質問されたくない'])assert.equal(questionRequested(makeContext([],text)),false);
+});
+test('fallback responses keep self return distinct from exploration and sky gazing',()=>{
+ const cases=[
+  ['',/私の言葉も.*横に置いて/],
+  ['AIに言われたから、そう思ってるだけかも',/私の言葉も.*横に置いて/],
+  ['もう考えたくない',/これ以上、考えを整理せず/],
+  ['疲れた',/これ以上、考えを整理せず/],
+  ['のびのびしすぎた',/自分の内側に戻って/],
+  ['相手の期待に引っ張られている',/外から入ってきた言葉.*横に置いて/],
+ ];
+ for(const [message,pattern] of cases){const reply=fallbackReply(makeContext([],message));assert.match(reply,pattern);assert.doesNotMatch(reply,/[?？]/);}
 });
 test('selected memory and PDF reach only generation, never the minimal classifier',async()=>{
  const calls=[];
@@ -77,9 +94,11 @@ test('body refusal, tentative sorting and corrections reach generation as user d
   await selfReturnReply({message,fetcher:async(_,init)=>{calls.push(JSON.parse(init.body));return modelResponse(calls.length===1?JSON.stringify(decision()):'話してくれたことを受け止めます。');}});
   const payload=JSON.parse(calls[1].contents[0].parts[0].text);
   assert.equal(payload.conversation.latest_user_message,message);
-  assert.match(calls[1].systemInstruction.parts[0].text,/AIが振り分けない/);
+  assert.match(calls[1].systemInstruction.parts[0].text,/AIが内外を分類しない/);
   assert.match(calls[1].systemInstruction.parts[0].text,/訂正はそのまま/);
-  assert.match(calls[1].systemInstruction.parts[0].text,/不快なら勧めない/);
+  assert.match(calls[1].systemInstruction.parts[0].text,/不快だと示したら勧めない/);
+  assert.match(calls[1].systemInstruction.parts[0].text,/通常対話のように話題を広げたり/);
+  assert.match(calls[1].systemInstruction.parts[0].text,/戻ろうとすること自体を休むモード/);
  }
 });
 const user='11111111-1111-4111-8111-111111111111',conversationId='22222222-2222-4222-8222-222222222222',requestId='33333333-3333-4333-8333-333333333333';
