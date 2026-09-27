@@ -64,8 +64,10 @@ test('invalid IDs and oversize input rejected',async()=>{for(const body of [{mes
 test('persisted context reaches Gemini in order and JWT is not forwarded',async()=>{
  const s=setup();const res=await s.invoke();assert.equal(res.code,200);assert.equal(res.body.saved,true);
  const model=s.calls.find(c=>c.url.includes(':generateContent'));
+ assert.equal(s.calls.filter(c=>c.url.includes(':generateContent')).length,1);
  assert.deepEqual(JSON.parse(model.init.body).contents.map(x=>x.role),['user','model','user']);
  assert.match(JSON.parse(model.init.body).systemInstruction.parts[0].text,/温かく静かに対話/);
+ assert.match(JSON.parse(model.init.body).systemInstruction.parts[0].text,/深める・広げる・戻る・進む・そのままでいる/);
  assert.match(JSON.parse(model.init.body).systemInstruction.parts[0].text,/検索された知識/);
  assert.equal(model.init.headers.Authorization,undefined);
  const save=s.calls.find(c=>c.url.includes('chat_save_turn'));
@@ -102,6 +104,7 @@ test('selected mode reaches Gemini without changing user text',async()=>{
   const s=setup();const r=await s.invoke({body:{message:'焦っています',conversationId:chat,requestId:request,seikanMode}});
   assert.equal(r.code,200);
   const generated=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+  assert.ok(generated.systemInstruction.parts[0].text.indexOf('スピリットドラゴンAI：共通の応答方針') < generated.systemInstruction.parts[0].text.indexOf('現在の会話モード：'));
   assert.ok(generated.systemInstruction.parts[0].text.includes(seikanMode?'現在の会話モード：静観':'現在の会話モード：通常'));
   assert.equal(generated.contents.at(-1).parts[0].text,'焦っています');
  }

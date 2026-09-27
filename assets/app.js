@@ -136,7 +136,7 @@ function controls() {
   $('emotionFocusHint').hidden=!emotionFocus;
   $('selfReturn').disabled=busy||pdfReading||!ready||(!session&&(!trialReady||trialRemaining<=0))||Date.now()<cooldownUntil;
   $('selfReturn').setAttribute('aria-pressed',String(selfReturn));
-  $('selfReturn').textContent=selfReturn?'自分に戻る：ON':'自分に戻る';
+  $('selfReturn').textContent=selfReturn?'🧭 自分に戻る：ON':'🧭 自分に戻る';
   $('selfReturnHint').hidden=!selfReturn;
   $('skyGazing').disabled=busy||!ready||(!session&&(!trialReady||trialRemaining<=0));
   $('skyGazing').setAttribute('aria-pressed',String(skyGazing));

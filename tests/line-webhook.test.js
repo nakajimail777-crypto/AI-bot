@@ -64,7 +64,9 @@ test('uses isolated server history, live persona and bookshelf and delivers with
   const s = setup({ state: { turns: [{ message: 'earlier', reply: 'answer' }], first: true } });
   assert.equal((await s.handler(request([event()]))).status, 200);
   const generation = s.calls.find(c => c.url.includes('generateContent')).body;
+  assert.equal(s.calls.filter(c => c.url.includes('generateContent')).length, 1);
   assert.match(generation.systemInstruction.parts[0].text, /PERSONA_FROM_DATABASE.*REFERENCE_FROM_DATABASE/s);
+  assert.match(generation.systemInstruction.parts[0].text, /深める・広げる・戻る・進む・そのままでいる/);
   assert.deepEqual(generation.contents.map(c => c.role), ['user', 'model', 'user']);
   assert.equal(generation.contents[0].parts[0].text, 'earlier');
   const reply = s.calls.find(c => c.url.includes('api.line.me')).body;

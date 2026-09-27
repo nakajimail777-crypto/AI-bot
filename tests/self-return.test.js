@@ -99,6 +99,7 @@ test('body refusal, tentative sorting and corrections reach generation as user d
   assert.match(calls[1].systemInstruction.parts[0].text,/不快だと示したら勧めない/);
   assert.match(calls[1].systemInstruction.parts[0].text,/通常対話のように話題を広げたり/);
   assert.match(calls[1].systemInstruction.parts[0].text,/戻ろうとすること自体を休むモード/);
+  assert.match(calls[1].systemInstruction.parts[0].text,/共通方針より次の専用規則を優先/);
  }
 });
 const user='11111111-1111-4111-8111-111111111111',conversationId='22222222-2222-4222-8222-222222222222',requestId='33333333-3333-4333-8333-333333333333';

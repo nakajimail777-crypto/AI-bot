@@ -3,6 +3,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {calculateUsage} from '../lib/pricing.js';
 import {randomUUID} from 'node:crypto';
+import {previewReply} from '../lib/preview-example-replies.js';
 const user='11111111-1111-4111-8111-111111111111';
 const conversation='22222222-2222-4222-8222-222222222222';
 const request='33333333-3333-4333-8333-333333333333';
@@ -34,11 +35,12 @@ const server=http.createServer(async(req,res)=>{
  }
  if(url.pathname==='/api/chat'){
  if(data.message.includes('429'))return json(res,{error:'今はAIへのアクセスが集中しています。約3秒待ってから、もう一度お試しください。入力した内容は残っています。',code:'AI_RATE_LIMIT',retryAfterSeconds:3},429);
+ const reply=previewReply(data.message);
  if(!receipts.has(data.requestId)){
  rows.push({id:data.requestId,conversation_id:data.conversationId,user_id:user,role:'user',content:data.message,sequence:rows.length+1});
- rows.push({id:randomUUID(),conversation_id:data.conversationId,user_id:user,role:'assistant',reply_to:data.requestId,content:'ローカル確認用の回答です。トークン数と料金はテストデータです。',sequence:rows.length+1});
+ rows.push({id:randomUUID(),conversation_id:data.conversationId,user_id:user,role:'assistant',reply_to:data.requestId,content:reply,sequence:rows.length+1});
  receipts.set(data.requestId,makeUsage());}
- return json(res,{reply:'ローカル確認用の回答です。',requestId:data.requestId,saved:true,usage:receipts.get(data.requestId)});
+ return json(res,{reply,requestId:data.requestId,saved:true,usage:receipts.get(data.requestId)});
  }
  }
  if(url.pathname==='/preview-sdk.js'){res.setHeader('Content-Type','text/javascript');return res.end(sdk);}

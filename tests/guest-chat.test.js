@@ -64,8 +64,9 @@ function setup({code,providerFailure=false}={}){
 test('guest generation uses server history, persona, RAG and selected mode',async()=>{
  const s=setup();assert.equal((await s.invoke()).code,200);
  const model=s.calls.find(c=>c.url.includes(':generateContent')).body;
+ assert.equal(s.calls.filter(c=>c.url.includes(':generateContent')).length,1);
  assert.deepEqual(model.contents.map(c=>c.role),['user','model','user']);assert.equal(model.contents[0].parts[0].text,'earlier question');
- assert.match(model.systemInstruction.parts[0].text,/スピリットドラゴン.*本棚/s);assert.match(model.systemInstruction.parts[0].text,/現在の会話モード：静観/);
+ assert.match(model.systemInstruction.parts[0].text,/スピリットドラゴン.*本棚/s);assert.match(model.systemInstruction.parts[0].text,/深める・広げる・戻る・進む・そのままでいる/);assert.match(model.systemInstruction.parts[0].text,/現在の会話モード：静観/);
 });
 test('trial limit prevents Gemini calls and failures release only the held lease',async()=>{
  const s=setup({code:'TRIAL_LIMIT'});assert.equal((await s.invoke()).code,429);assert.ok(!s.calls.some(c=>c.url.includes('googleapis')));
