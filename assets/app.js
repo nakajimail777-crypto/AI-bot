@@ -21,7 +21,7 @@ async function readTrial(version){
 }
 async function sendTrial(modeStart=false){
  if(!trialReady||trialRemaining<=0){$('authDialog').showModal();return;}
- const text=modeStart?'':input.value.trim(),version=epoch,replyVersion=++responseVersion;
+ const sentDraft=input.value,text=modeStart?'':sentDraft.trim(),version=epoch,replyVersion=++responseVersion;
  if(text.length>4000)throw new Error('メッセージは4,000文字以内で入力してください。');
  if(!trialPending||trialPending.text!==text||trialPending.mode!==seikanMode||trialPending.blindSpot!==blindSpot||trialPending.emotionFocus!==emotionFocus||trialPending.encouragement!==encouragement||trialPending.returnPath!==returnPath||trialPending.skyGazing!==skyGazing||trialPending.selfReturn!==selfReturn||trialPending.modeStart!==modeStart)trialPending={text,mode:seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,modeStart,id:crypto.randomUUID()};
  status('返答を考えています…');replyWaiting(true);
@@ -32,7 +32,7 @@ async function sendTrial(modeStart=false){
   if(['TRIAL_LIMIT','TRIAL_ATTEMPTS','TRIAL_NETWORK_LIMIT'].includes(data.code)){trialRemaining=0;$('authDialog').showModal();}
   throw new Error(data.error||'送信できませんでした。入力は残っています。');
  }
- encouragement=false;blindSpot=false;returnPath=false;trialRemaining=data.remaining;if(!modeStart)input.value='';trialPending=null;
+ encouragement=false;blindSpot=false;returnPath=false;trialRemaining=data.remaining;if(!modeStart&&input.value===sentDraft)input.value='';trialPending=null;
  await loadTrial();
  $('conversation').scrollTop=$('conversation').scrollHeight;
  status(trialRemaining>0?'あと'+trialRemaining+'回お試しいただけます。':'5往復のお試しが終わりました。ログインすると新しい会話を始められます。');
@@ -50,7 +50,7 @@ $('selfReturn').onclick=()=>{
  selfReturn=!selfReturn;responseVersion++;pending=null;trialPending=null;
  seikanMode=false;emotionFocus=false;blindSpot=false;encouragement=false;returnPath=false;skyGazing=false;
  rememberDraft();controls();
- if(selfReturn)submitMessage(true);
+ if(selfReturn){submitMessage(true);input.focus();}
  else status('自分に戻るモードをOFFにしました。');
 };
 $('skyGazing').onclick=()=>{
@@ -164,7 +164,7 @@ function controls() {
   $('removeRecall').disabled=busy;
   document.querySelectorAll('.memory-use').forEach(button=>button.disabled=busy||!ready);
   document.querySelectorAll('.memory-delete,#moreMemories,#refreshMemories').forEach(b=>b.disabled=busy||!ready);
-  input.disabled = busy || !ready || (!session&&(!trialReady||trialRemaining<=0));
+  input.disabled = !ready || (!session&&(!trialReady||trialRemaining<=0)) || (busy&&!selfReturn);
   $('trialBanner').hidden=!!session;
   $('trialCount').textContent=trialRemaining>0?'ログインなしであと'+trialRemaining+'回お試しできます。':'お試しは終了しました。ログインして新しい会話を始めましょう。';
   $('newChat').disabled = busy || !ready || !session;
@@ -344,7 +344,7 @@ function submitMessage(modeStart=false){
   if(busy||pdfReading||(!modeStart&&!input.value.trim()&&!attachedPdf)||Date.now()<cooldownUntil)return;
   run(async()=>{
     if(!session){await sendTrial(modeStart);return;}
-    const text=modeStart?'':(input.value.trim() || '添付したPDFの内容を要約してください。'), version=epoch, replyVersion=++responseVersion;
+    const sentDraft=input.value, text=modeStart?'':(sentDraft.trim() || '添付したPDFの内容を要約してください。'), version=epoch, replyVersion=++responseVersion;
     const attachment=modeStart?null:attachedPdf, memoryId=modeStart?null:(selectedMemory?.id||null);
     if(attachment && `${text}\n\n［添付PDF：${attachment.name}］`.length>4000)throw new Error('PDFのファイル名を含めて4,000文字以内になるよう、質問を短くしてください。');
     if(text.length>4000)throw new Error('メッセージは4,000文字以内で入力してください。');
@@ -373,7 +373,7 @@ function submitMessage(modeStart=false){
     if(!data.saved)throw new Error('保存を確認できませんでした。もう一度お試しください。');
     if(version!==epoch||replyVersion!==responseVersion)return;
     if(data.usage)usageCache.set(pending.requestId,data.usage);
-    encouragement=false;blindSpot=false;returnPath=false;if(!modeStart){input.value='';clearRecall();}pending=null;rememberDraft();status('保存しました');
+    encouragement=false;blindSpot=false;returnPath=false;if(!modeStart){if(input.value===sentDraft)input.value='';clearRecall();}pending=null;rememberDraft();status('保存しました');
     await loadMessages();await loadHistory();
   });
 }

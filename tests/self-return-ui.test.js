@@ -13,7 +13,7 @@ function setup(){
  let finish,requested;
  const context=vm.createContext({document:{getElementById:element,querySelectorAll:()=>[]},location:{search:''},window:{},crypto:{randomUUID},setTimeout,clearTimeout,setInterval:()=>0,AbortSignal,URL,Blob,sessionStorage:{setItem(){},getItem(){return null;}},fetch:async(url,init)=>{requested={url,body:JSON.parse(init.body)};return new Promise(resolve=>{finish=resolve;});}});
  vm.runInContext(source,context);
- vm.runInContext(`ready=true;session={user:{id:'user'}};activeId='chat';selfReturn=true;
+ vm.runInContext(`ready=true;session={user:{id:'user'}};activeId='chat';selfReturn=true;globalThis.originalControls=controls;
  db={auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}};
  controls=()=>{};rememberDraft=()=>{};replyWaiting=()=>{};loadMessages=async()=>{};loadHistory=async()=>{};
  run=action=>{globalThis.completed=action();};`,context);
@@ -31,6 +31,20 @@ test('normal mode turn maintains selection and clears only the sent draft',async
  vm.runInContext('submitMessage()',s.context);await new Promise(resolve=>setImmediate(resolve));
  assert.equal(s.requested.body.message,'肩が重い');assert.equal(s.requested.body.selfReturn,true);
  s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'');assert.equal(vm.runInContext('selfReturn',s.context),true);
+});
+test('self-return keeps the composer available while a reply is pending',()=>{
+ const s=setup();
+ vm.runInContext('busy=true;originalControls();',s.context);
+ assert.equal(s.element('messageInput').disabled,false);
+ assert.equal(s.element('sendButton').disabled,true);
+});
+test('text entered while a self-return reply is pending remains as the next draft',async()=>{
+ const s=setup();s.element('messageInput').value='肩が重い';
+ vm.runInContext('submitMessage()',s.context);await new Promise(resolve=>setImmediate(resolve));
+ s.element('messageInput').value='少し休んでみる';
+ s.respond();await s.context.completed;
+ assert.equal(s.element('messageInput').value,'少し休んでみる');
+ assert.equal(vm.runInContext('selfReturn',s.context),true);
 });
 for(const change of ['leaveSelfReturn();','responseVersion++;','epoch++;'])test(`late response cannot overwrite new state after ${change}`,async()=>{
  const s=setup();s.element('messageInput').value='old';
