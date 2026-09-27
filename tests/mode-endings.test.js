@@ -23,5 +23,6 @@ test('sky gazing allows nothing to happen and leaves a small open ending', () =>
   assert.match(instruction, /返答末尾の1〜2文/);
   assert.match(instruction, /何かが浮かんでも浮かばなくても、何も起きなくても成立/);
   assert.match(instruction, /原則として質問で終わらせません/);
+  assert.match(instruction, /評価や.*指示で閉じず/);
   assert.match(instruction, /大げさで詩的な表現を足しません/);
 });
