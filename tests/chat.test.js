@@ -232,6 +232,20 @@ for(const modeStart of [true,false])test('deep prototype preserves history and g
  assert.ok(!s.calls.some(c=>c.url.includes(':embedContent')));
  assert.match(JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message,/［深く降りる/);
 });
+test('case 001 guidance reaches generation without changing history or adding analysis calls',async()=>{
+ const message='逃げる30％果たす70％くらい。信用無くなるなって感じ';
+ const s=setup();const r=await s.invoke({body:{message,conversationId:chat,requestId:request,deepExploration:true}});
+ assert.equal(r.code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);
+ const body=JSON.parse(models[0].init.body),rules=body.systemInstruction.parts[0].text;
+ assert.match(rules,/選択の割合と動機は分ける/);
+ assert.match(rules,/決断したことから納得・成長を推定せず/);
+ assert.match(rules,/答えてほしい内容の数/);
+ assert.match(rules,/「迷っている」を強い苦しさに置き換えない/);
+ assert.ok(body.contents.at(-1).parts[0].text.includes(message));
+ assert.equal(body.contents[0].parts[0].text,'前の質問');
+ assert.ok(!s.calls.some(c=>c.url.includes(':embedContent')||c.url.includes('match_knowledge')));
+});
 test('deep mode rejects invalid and conflicting flags before network calls',async()=>{
  for(const flags of [{deepExploration:'yes'},{deepExploration:true,selfReturn:true},{deepExploration:true,skyGazing:true}]){
  const s=setup();assert.equal((await s.invoke({body:{message:'test',conversationId:chat,requestId:request,...flags}})).code,400);assert.equal(s.calls.length,0);
