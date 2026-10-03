@@ -34,10 +34,10 @@ const server=http.createServer(async(req,res)=>{
  return json(res,{data:data.single?selected[0]||null:data.table==='messages'?[...selected].sort((a,b)=>b.sequence-a.sequence):selected,error:null});
  }
  if(url.pathname==='/api/chat'){
- const previewReply=data.selfReturn?fallbackReply(makeContext(rows.filter(row=>row.conversation_id===data.conversationId),data.message,data.modeStart)):'ローカル確認用の回答です。';
+ const previewReply=data.deepExploration?(data.modeStart?'【ローカルの固定応答】今の話を、少し内側のほうから見てみようか。':/疲れた|ここまで|分からない|もう十分/.test(data.message)?'【ローカルの固定応答】ここで止めておきましょう。答えを出さなくても大丈夫です。':'【ローカルの固定応答】その気持ちは、今どんなふうに感じられますか？'):data.selfReturn?fallbackReply(makeContext(rows.filter(row=>row.conversation_id===data.conversationId),data.message,data.modeStart)):'ローカル確認用の回答です。';
  if(data.message.includes('429'))return json(res,{error:'今はAIへのアクセスが集中しています。約3秒待ってから、もう一度お試しください。入力した内容は残っています。',code:'AI_RATE_LIMIT',retryAfterSeconds:3},429);
  if(!receipts.has(data.requestId)){
- rows.push({id:data.requestId,conversation_id:data.conversationId,user_id:user,role:'user',content:data.modeStart?'［自分に戻るを選択］':data.message,sequence:rows.length+1});
+ rows.push({id:data.requestId,conversation_id:data.conversationId,user_id:user,role:'user',content:data.modeStart?(data.deepExploration?'［深く降りるを選択］':'［自分に戻るを選択］'):data.message,sequence:rows.length+1});
  rows.push({id:randomUUID(),conversation_id:data.conversationId,user_id:user,role:'assistant',reply_to:data.requestId,content:previewReply,sequence:rows.length+1});
  receipts.set(data.requestId,makeUsage());}
  return json(res,{reply:previewReply,requestId:data.requestId,saved:true,usage:receipts.get(data.requestId)});

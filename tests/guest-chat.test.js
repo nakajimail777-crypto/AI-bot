@@ -114,3 +114,11 @@ test('guest sky gazing reaches Gemini and the reserved message',async()=>{
  assert.doesNotMatch(model.systemInstruction.parts[0].text,/今回の返答だけ：戻れる逃げ道/);
  assert.equal(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,'月\n\n［空を眺める］');
 });
+
+test('guest deep mode uses existing history and a single generation',async()=>{
+ const s=setup();const r=await s.invoke({body:{message:'',requestId:randomUUID(),deepExploration:true,modeStart:true}});
+ assert.equal(r.code,200);const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);
+ assert.equal(models[0].body.contents[0].parts[0].text,'earlier question');
+ assert.match(models[0].body.systemInstruction.parts[0].text,/自己探索：深く降りる/);
+ assert.equal(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,'［深く降りるを選択］');
+});

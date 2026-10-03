@@ -11,7 +11,7 @@ function setup(){
   return nodes.get(id);
  };
  let finish,requested;
- const context=vm.createContext({document:{getElementById:element,querySelectorAll:()=>[]},location:{search:''},window:{},crypto:{randomUUID},setTimeout,clearTimeout,setInterval:()=>0,AbortSignal,URL,Blob,sessionStorage:{setItem(){},getItem(){return null;}},fetch:async(url,init)=>{requested={url,body:JSON.parse(init.body)};return new Promise(resolve=>{finish=resolve;});}});
+ const context=vm.createContext({document:{getElementById:element,querySelector:()=>({open:true}),querySelectorAll:()=>[]},location:{search:''},window:{},crypto:{randomUUID},setTimeout,clearTimeout,setInterval:()=>0,AbortSignal,URL,Blob,sessionStorage:{setItem(){},getItem(){return null;}},fetch:async(url,init)=>{requested={url,body:JSON.parse(init.body)};return new Promise(resolve=>{finish=resolve;});}});
  vm.runInContext(source,context);
  vm.runInContext(`ready=true;session={user:{id:'user'}};activeId='chat';selfReturn=true;globalThis.originalControls=controls;
  db={auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}};
@@ -51,4 +51,18 @@ for(const change of ['leaveSelfReturn();','responseVersion++;','epoch++;'])test(
  vm.runInContext('submitMessage()',s.context);await new Promise(resolve=>setImmediate(resolve));
  vm.runInContext(change,s.context);s.element('messageInput').value='new draft';
  s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'new draft');
+});
+
+test('deep activation and exit keep the conversation and draft, other routes have no handlers',async()=>{
+ const s=setup();s.element('messageInput').value='下書き';
+ s.element('deepExploration').onclick();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(s.requested.body.conversationId,'chat');assert.equal(s.requested.body.deepExploration,true);assert.equal(s.requested.body.selfReturn,false);assert.equal(s.requested.body.modeStart,true);
+ s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'下書き');
+ assert.equal(vm.runInContext('deepExploration',s.context),true);
+ s.element('endDeepExploration').onclick();assert.equal(vm.runInContext('deepExploration',s.context),false);assert.equal(vm.runInContext('activeId',s.context),'chat');assert.equal(s.element('messageInput').value,'下書き');
+});
+test('selecting an existing mode exits deep exploration',()=>{
+ for(const id of ['selfReturn','skyGazing','emotionFocus','blindSpot','returnPath','seikanMode']){
+ const s=setup();vm.runInContext('deepExploration=true;selfReturn=false;submitMessage=()=>{};',s.context);s.element(id).onclick();assert.equal(vm.runInContext('deepExploration',s.context),false);
+ }
 });

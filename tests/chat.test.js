@@ -220,3 +220,27 @@ test('invalid sky mode fails before authentication and generation',async()=>{
  const s=setup();assert.equal((await s.invoke({body:{message:'x',conversationId:chat,requestId:request,skyGazing:'yes'}})).code,400);
  assert.equal(s.calls.length,0);
 });
+
+for(const modeStart of [true,false])test('deep prototype preserves history and generates once: '+modeStart,async()=>{
+ const s=setup();const r=await s.invoke({body:{message:modeStart?'':'最近仕事で焦っている',conversationId:chat,requestId:request,deepExploration:true,modeStart}});
+ assert.equal(r.code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);
+ const body=JSON.parse(models[0].init.body);
+ assert.equal(body.contents[0].parts[0].text,'前の質問');
+ assert.match(body.systemInstruction.parts[0].text,/自己探索：深く降りる/);
+ assert.match(body.systemInstruction.parts[0].text,/最大1つ/);
+ assert.ok(!s.calls.some(c=>c.url.includes(':embedContent')));
+ assert.match(JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message,/［深く降りる/);
+});
+test('deep mode rejects invalid and conflicting flags before network calls',async()=>{
+ for(const flags of [{deepExploration:'yes'},{deepExploration:true,selfReturn:true},{deepExploration:true,skyGazing:true}]){
+ const s=setup();assert.equal((await s.invoke({body:{message:'test',conversationId:chat,requestId:request,...flags}})).code,400);assert.equal(s.calls.length,0);
+ }
+});
+test('leaving deep mode resets its instructions while keeping history',async()=>{
+ const s=setup({history:[{role:'user',content:'焦り\n\n［深く降りる］',sequence:1}]});await s.invoke();
+ const body=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+ assert.match(body.systemInstruction.parts[0].text,/自己探索の終了/);
+ assert.doesNotMatch(body.systemInstruction.parts[0].text,/【自己探索：深く降りる】/);
+ assert.match(body.contents[0].parts[0].text,/焦り/);
+});

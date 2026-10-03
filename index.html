@@ -420,10 +420,22 @@
         <button class="icon-button mobile-menu" id="openSidebar" type="button" aria-label="履歴を開く">
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <button class="model-button" type="button" aria-label="使用モデル">
+        <details class="exploration-menu">
+        <summary class="model-button" aria-label="スピリットドラゴンAI メニュー">
           <span>スピリットドラゴンAI</span><span class="model-sub"></span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
+        </summary>
+        <details class="self-exploration" id="selfExploration">
+          <summary><span>自己探索<small>今の自分を、少し違う角度から見てみる</small></span></summary>
+          <div class="exploration-routes" role="group" aria-label="自己探索のルート" aria-describedby="explorationNotice">
+            <!-- Only deep is connected. The other routes remain UI-only. -->
+            <button type="button" class="plain-button exploration-route" id="deepExploration" aria-pressed="false" data-exploration-route="deep"><span>深く降りる</span><small>気持ちや身体感覚をたどる</small></button>
+            <button type="button" class="plain-button exploration-route" data-exploration-route="pattern"><span>パターンを見る</span><small>繰り返している考え方や反応を探す</small></button>
+            <button type="button" class="plain-button exploration-route" data-exploration-route="direction"><span>方角を見る</span><small>自分が本当はどうしたいかを探す</small></button>
+          </div>
+          <p id="explorationNotice">「深く降りる」は試作です。他の2項目は準備中です。</p>
+        </details>
+        </details>
         <button id="rememberChat" class="plain-button chat-actions" type="button" title="この会話全体を記憶に保存" hidden>会話を覚える</button>
         <button id="copyChat" class="plain-button" type="button" hidden>会話をコピー</button>
         <button id="deleteChat" class="plain-button" type="button" hidden>会話を削除</button>
@@ -443,6 +455,7 @@
       </section>
 
       <div class="composer-wrap">
+        <div id="deepExplorationState" class="deep-exploration-state" hidden><span>自己探索 ＞ 深く降りる</span><button id="endDeepExploration" type="button" class="plain-button">通常対話へ</button></div>
         <div id="trialBanner" class="trial-banner" hidden><span id="trialCount">ログインなしで5往復お試しできます。</span><button id="trialLogin" class="plain-button" type="button">ログイン</button><small>体験の会話はこのブラウザで30日間表示できます。ログイン後の保存履歴には引き継がれません。PDF添付はログイン後に使えます。</small></div>
         <form class="composer" id="composer">
           <input id="pdfInput" type="file" accept=".pdf,application/pdf" hidden>
