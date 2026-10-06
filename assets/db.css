@@ -13,6 +13,16 @@ button:disabled { cursor: default; opacity: .45; }
 [hidden] { display: none !important; }
 .assistant-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .assistant-content { min-width: 0; flex: 1; }
+.answer-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+.answer-copy { position: relative; height: 44px; width: 44px; flex: 0 0 44px; padding: 0; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 0; cursor: pointer; }
+.answer-copy::before, .answer-copy::after { content: ''; position: absolute; width: 11px; height: 12px; border: 1.5px solid currentColor; border-radius: 3px; }
+.answer-copy::before { left: 12px; top: 12px; }
+.answer-copy::after { left: 17px; top: 17px; background: #212121; }
+.answer-copy[data-state='copied']::before, .answer-copy[data-state='error']::before { display: none; }
+.answer-copy[data-state='copied']::after { left: 17px; top: 12px; width: 7px; height: 14px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; border-radius: 0; background: transparent; transform: rotate(45deg); }
+.answer-copy[data-state='error']::after { content: '!'; left: 12px; top: 12px; width: 18px; height: 18px; font-size: 14px; line-height: 18px; text-align: center; }
+.answer-copy:hover { background: #303030; color: var(--text); }
+.answer-copy:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .answer-usage { color: var(--muted); margin-top: 14px; font-size: 12px; line-height: 1.8; }
 .answer-usage summary { cursor: pointer; }
 .answer-usage p,.usage-monthly { white-space: pre-line; overflow-wrap: anywhere; }

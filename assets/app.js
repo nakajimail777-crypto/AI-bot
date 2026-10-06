@@ -204,6 +204,51 @@ function rememberDraft() {
   if (!session) return;
   try { sessionStorage.setItem(storageKey(),JSON.stringify({ activeId, text:input.value, pending, cooldownUntil, seikanMode, blindSpot, emotionFocus, encouragement, returnPath, skyGazing, selfReturn, deepExploration, selectedMemory })); } catch {}
 }
+async function copyAnswerText(value) {
+  try {
+    await navigator.clipboard.writeText(value);
+    return;
+  } catch {
+    const field=document.createElement('textarea'), previous=document.activeElement;
+    const selection=document.getSelection();
+    const ranges=selection?Array.from({length:selection.rangeCount},(_,i)=>selection.getRangeAt(i).cloneRange()):[];
+    const start=previous?.selectionStart, end=previous?.selectionEnd;
+    field.value=value;field.setAttribute('readonly','');
+    field.style.cssText='position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;font-size:16px';
+    document.body.append(field);
+    try {
+      field.focus({preventScroll:true});field.select();field.setSelectionRange(0,field.value.length);
+      if(!document.execCommand('copy'))throw new Error('Copy failed');
+    } finally {
+      field.remove();previous?.focus({preventScroll:true});
+      if(typeof start==='number' && typeof end==='number')previous.setSelectionRange(start,end);
+      if(selection){selection.removeAllRanges();for(const range of ranges)selection.addRange(range);}
+    }
+  }
+}
+function answerCopyButton(value) {
+  const button=document.createElement('button');
+  button.type='button';button.className='answer-copy';button.textContent='コピー';
+  button.setAttribute('aria-label','このAI回答をコピー');button.setAttribute('aria-live','polite');
+  button.title='メッセージをコピーする';button.dataset.state='idle';
+  let copying=false,timer;
+  button.onclick=async()=>{
+    if(copying)return;
+    copying=true;clearTimeout(timer);
+    try {
+      await copyAnswerText(value);
+      button.textContent='コピーしました ✓';
+      button.dataset.state='copied';
+    } catch {
+      button.textContent='コピーできませんでした';
+      button.dataset.state='error';
+    } finally {
+      copying=false;button.setAttribute('aria-label',button.textContent);button.title=button.textContent;
+      timer=setTimeout(()=>{button.textContent='コピー';button.setAttribute('aria-label','このAI回答をコピー');button.title='メッセージをコピーする';button.dataset.state='idle';},2000);
+    }
+  };
+  return button;
+}
 function renderMessages() {
   messages.replaceChildren();
   if (olderMore) {
@@ -228,7 +273,8 @@ function renderMessages() {
       const title=document.createElement('summary'); title.textContent='トークン数・推定料金';
       detail.hidden=!session;
       const stats=document.createElement('p'); stats.textContent=DragonUsage.answer(usageCache.get(row.reply_to));
-      detail.append(title,stats); content.append(text,detail); wrap.append(badge,content); block.append(wrap);
+      const actions=document.createElement('div');actions.className='answer-actions';actions.append(answerCopyButton(row.content));
+      detail.append(title,stats); content.append(text,actions,detail); wrap.append(badge,content); block.append(wrap);
     } else block.append(text);
     messages.append(block);
   }
