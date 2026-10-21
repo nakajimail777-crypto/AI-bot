@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {PGlite} from '@electric-sql/pglite';
+import {createReflection} from '../assets/mind-reflection.js';
+test('reflection RLS, atomic save, update receipts, retry, conflict and draft separation',async()=>{
+ const db=new PGlite();
+ try{
+  await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);
+   create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.uid',true),'')::uuid$$;
+   create function auth.jwt() returns jsonb language sql stable as $$select jsonb_build_object('is_anonymous',coalesce(nullif(current_setting('request.anon',true),''),'false')::boolean)$$;
+   grant usage on schema auth,public to authenticated,anon;grant execute on all functions in schema auth to authenticated,anon;`);
+  await db.exec(await readFile(new URL('../supabase/migrations/20261022_mind_reflections.sql',import.meta.url),'utf8'));
+  const u='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',id='33333333-3333-4333-8333-333333333333';
+  await db.query('insert into auth.users values($1),($2)',[u,other]);
+  await db.exec(`set role authenticated;set request.uid='${u}';`);
+  const data=createReflection(id);data.fields.feeling.note='胸がざわざわした';
+  const save=async(kind,payload,rev=null)=>(await db.query('select public.save_mind_reflection($1,$2,$3,$4) receipt',[id,kind,payload,rev])).rows[0].receipt;
+  const draft=await save('draft',data);
+  assert.equal((await save('draft',data)).revision,draft.revision);
+  assert.equal((await db.query('select count(*)::int n from mind_reflections')).rows[0].n,1);
+  data.resultViewedAt='2026-10-22T00:00:00Z';const record=await save('record',data);
+  assert.equal((await db.query("select count(*)::int n from mind_reflections where kind='draft'")).rows[0].n,0);
+  const retry=await save('record',data);assert.equal(retry.saved_at,record.saved_at);assert.equal(retry.revision,record.revision);
+  data.fields.event.value='編集';await assert.rejects(save('record',data),/REFLECTION_CONFLICT/);
+  const updated=await save('record',data,record.revision);assert.notEqual(updated.revision,record.revision);
+  data.fields.event.value='下書きだけの編集';await save('draft',data);
+  assert.equal((await db.query("select payload from mind_reflections where kind='record'")).rows[0].payload.fields.event.value,'編集');
+  await db.exec(`set request.uid='${other}'`);
+  assert.equal((await db.query('select count(*)::int n from mind_reflections')).rows[0].n,0);
+  await assert.rejects(db.query('insert into mind_reflections(user_id,id,kind,payload) values($1,$2,$3,$4)',[u,id,'draft',data]),/row-level security/);
+  await db.exec(`set request.uid='${u}';set request.anon='true';`);
+  assert.equal((await db.query('select count(*)::int n from mind_reflections')).rows[0].n,0);
+  await assert.rejects(save('draft',data),/AUTH_REQUIRED/);
+  await db.exec("set request.anon='false'");
+  const invalid=structuredClone(data);invalid.fields.event.value='あ'.repeat(2001);
+  await assert.rejects(save('record',invalid,updated.revision),/INVALID_RECORD/);
+  delete invalid.version;assert.equal((await db.query('select valid_mind_reflection($1) valid',[invalid])).rows[0].valid,false);
+  const nullChoice=structuredClone(data);nullChoice.fields.feeling.value=[null];
+  assert.equal((await db.query('select valid_mind_reflection($1) valid',[nullChoice])).rows[0].valid,false);
+  await db.exec('reset role;set role anon');await assert.rejects(db.query('select * from mind_reflections'),/permission denied/);
+ }finally{await db.close();}
+});

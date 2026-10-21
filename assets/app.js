@@ -1,6 +1,8 @@
 const $ = id => document.getElementById(id);
 const input = $('messageInput'), send = $('sendButton'), messages = $('messages');
 let db, session = null, activeId = null, busy = false, ready = false, epoch = 0, pending = null, rows = [], chats = [];
+// Reflection uses the same authenticated client; it never enters chat requests automatically.
+globalThis.getDragonReflectionContext=()=>({db,userId:session?.user?.is_anonymous?null:session?.user?.id||null});
 let historyOffset = 0, historyMore = false, olderMore = false;
 let incomingNumbers = globalThis.DragonNumberEntry?.read(location.search);
 let trialRemaining=5, trialReady=false, trialPending=null, trialLoading=null;
@@ -318,6 +320,7 @@ async function run(action) {
 async function changeSession(next) {
   const oldId=session?.user.id, nextId=next?.user.id;
   session=next;
+  document.dispatchEvent(new Event('dragon-reflection-session'));
   if(oldId!==nextId){leaveSelfReturn();seikanMode=false;encouragement=false;blindSpot=false;emotionFocus=false;returnPath=false;skyGazing=false;}
   if(oldId===nextId){if(!next){ready=true;try{await loadTrial();}catch(error){status(error.message,true);}}controls();return;}
   resetMemories();

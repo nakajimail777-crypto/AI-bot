@@ -385,6 +385,7 @@
     }
   </style>
   <link rel="stylesheet" href="/assets/db.css">
+  <link rel="stylesheet" href="/assets/mind-reflection.css">
 </head>
 <body>
   <div class="app">
@@ -434,6 +435,19 @@
             <button type="button" class="plain-button exploration-route" data-exploration-route="direction"><span>方角を見る</span><small>自分が本当はどうしたいかを探す</small></button>
           </div>
           <p id="explorationNotice">「深く降りる」は試作です。他の2項目は準備中です。</p>
+          <details class="mr-entry" id="mindReflectionEntry">
+            <summary>心の動きに気づく</summary>
+            <div class="mr-entry-body">
+              <p>最近あった出来事を振り返りながら、何を感じ、どう受け取り、どのように反応したのかを整理できます。正解を探したり、感情を変えたりする必要はありません。自分のことを少し深く理解するための時間です。</p>
+              <p>短時間で気軽に始められます。書きたくない項目は飛ばしてもかまいません。</p>
+              <div class="mr-actions">
+                <button type="button" class="mr-primary" data-mr-open="observe">振り返りを始める</button>
+                <button type="button" data-mr-open="about">使い方を見る</button>
+                <button type="button" data-mr-open="theory">もっと深く学ぶ</button><button type="button" data-mr-open="home">下書き・保存した振り返り</button>
+              </div>
+              <p class="mr-preview">記録や下書きは、保存の操作をしたときだけ残ります。</p>
+            </div>
+          </details>
         </details>
         </details>
         <button id="rememberChat" class="plain-button chat-actions" type="button" title="この会話全体を記憶に保存" hidden>会話を覚える</button>
@@ -586,5 +600,6 @@
   </dialog>
   <script defer src="/assets/memories.js"></script>
   <script defer src="/assets/app.js"></script>
+  <script type="module" src="/assets/mind-reflection.js"></script>
 </body>
 </html>
