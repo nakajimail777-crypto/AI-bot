@@ -183,6 +183,11 @@ function mount() {
       case 'result':
         header('あなたの心の動き','出来事、感じたこと、受け取り方、反応、そして振り返って感じることを整理しました。','振り返り');
         results();
+        content.append(button('この振り返りから実験する',()=>{
+          if(!globalThis.openReactionLabFromReflection){announce('実験室を読み込めませんでした。入力は保持されています。');return;}
+          const snapshot=structuredClone(reflection);
+          end();globalThis.openReactionLabFromReflection(snapshot);
+        }));
         content.append(actions(button('スピリットドラゴンに相談する',()=>{shareText=reflectionMessage(reflection);go({screen:'share'});},true)));
         content.append(el('p',{},'同じ出来事でも、受け取り方やそのときの状態によって、感じ方や反応は変わります。今回の整理は、あなたを決めつけるものではありません。'),el('p',{id:'mr-save-note'},stateLine()),actions(button('もう一度振り返る',()=>go({screen:'observe'},true),true),recordSaveButton(),button('閉じる',confirmClose)),el('p',{},'この見方の背景を知りたい場合は、詳しい解説を読めます。'),button('もっと深く学ぶ',()=>go({screen:'about',from:view})));
         break;

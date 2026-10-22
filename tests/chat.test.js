@@ -4,6 +4,27 @@ import { createHandler } from '../lib/chat.js';
 import configHandler from '../api/config.js';
 const user='f1d680a0-9c2a-4a01-a001-000000000001', chat='f1d680a0-9c2a-4a01-b001-000000000001', request='f1d680a0-9c2a-4a01-9001-000000000001';
 const env={SUPABASE_URL:'https://db.test',SUPABASE_PUBLISHABLE_KEY:'sb_publishable_test',SUPABASE_SECRET_KEY:'sb_secret_test',GEMINI_API_KEY:'gemini-test'};
+test('lab guide uses existing persona and Gemini, avoids RAG and saves separately marked turns',async()=>{
+ for(const candidates of [false,true]){
+  const s=setup();const res=await s.invoke({body:{message:'通知を何度も見た',conversationId:chat,requestId:request,reactionLab:{step:2,candidates}}});assert.equal(res.code,200);
+  const generated=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body),prompt=generated.systemInstruction.parts[0].text;
+  assert.match(prompt,/温かく静かに対話/);assert.match(prompt,/反応の実験室：選択/);assert.match(prompt,/採点しない/);
+  assert.match(prompt,candidates?/最大3つ/:/改善案・行動課題を勝手に提示せず/);
+  assert.ok(!s.calls.some(c=>c.url.includes(':embedContent')||c.url.includes('/memories?')));
+  const saved=JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body);assert.match(saved.p_message,/［反応の実験室：選択/);
+  assert.ok(!s.calls.some(c=>c.url.includes('reaction_experiments')));
+ }
+});
+test('lab rejects mixed modes, attachments, memories and invalid stages before external calls',async()=>{
+ for(const extra of [{deepExploration:true},{selfReturn:true},{seikanMode:true},{memoryId:user},{attachment:pdf},{reactionLab:{step:0,candidates:true}},{reactionLab:{step:5,candidates:false}},{reactionLab:{step:2,candidates:'yes'}}]){
+  const s=setup();const r=await s.invoke({body:{message:'確認',conversationId:chat,requestId:request,reactionLab:{step:2,candidates:false},...extra}});assert.equal(r.code,400);assert.equal(s.calls.length,0);
+ }
+});
+test('normal conversation after lab explicitly ends experimental guidance',async()=>{
+ const s=setup({history:[{role:'user',content:'確認\n\n［反応の実験室：選択／候補を希望］',sequence:1}]});await s.invoke();
+ const prompt=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body).systemInstruction.parts[0].text;
+ assert.match(prompt,/実験室の終了/);assert.doesNotMatch(prompt,/【反応の実験室：選択】/);
+});
 const pdf={name:'資料.pdf',mimeType:'application/pdf',data:Buffer.from('%PDF-1.4\nfixture\n%%EOF').toString('base64')};
 function response(){return {headers:{},setHeader(k,v){this.headers[k]=v;},status(n){this.code=n;return this;},json(v){this.body=v;return this;}};}
 function setup(options={}){

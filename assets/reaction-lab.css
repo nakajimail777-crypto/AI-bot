@@ -1,0 +1,26 @@
+.rl-dialog { color:#f1f1ef;background:#232725;border:1px solid #718278;border-radius:16px;width:min(720px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);padding:0;overflow:auto;overscroll-behavior:contain;box-sizing:border-box;color-scheme:dark; }
+.rl-dialog::backdrop { background:rgb(0 0 0 / 65%); }
+.rl-content { padding:24px; }
+.rl-dialog h2 { font-size:24px;line-height:1.5; }
+.rl-dialog p { line-height:1.8;overflow-wrap:anywhere; }
+.rl-dialog textarea { display:block;box-sizing:border-box;width:100%;font:inherit;font-size:16px;line-height:1.8;background:#191d1b;color:inherit;border:1px solid #82958a;border-radius:8px;padding:12px;resize:vertical; }
+.rl-field { margin:20px 0; }
+.rl-field label { display:block;margin-bottom:8px; }
+.rl-count { font-size:12px;text-align:right; }
+.rl-dialog [aria-invalid="true"] { border:2px solid #ffc4b7; }
+.rl-actions { display:flex;flex-wrap:wrap;gap:10px;margin:18px 0; }
+.rl-dialog button { color:inherit;background:transparent;border:1px solid #82958a;border-radius:8px;font:inherit;padding:12px;min-height:44px;cursor:pointer;white-space:normal;overflow-wrap:anywhere; }
+.rl-dialog button:hover { background:#ffffff15; }
+.rl-dialog button:disabled { opacity:.6;cursor:wait; }
+.rl-dialog :focus-visible,.rl-dialog [tabindex="-1"]:focus { outline:3px solid #c5efdc;outline-offset:3px; }
+.rl-note { border-left:3px solid #a9d8c9;padding:12px;font-size:13px; }
+.rl-live { margin:0;padding:0 24px 20px; }
+.rl-confirm { padding:24px;max-width:500px; }
+.rl-choice { display:flex;gap:12px;align-items:flex-start;min-height:44px;padding:10px;cursor:pointer; }
+.rl-choice input { width:20px;height:20px;flex:none; }
+.rl-dialog fieldset { min-width:0;border:1px solid #718278;border-radius:8px; }
+.rl-comparison { display:grid;grid-template-columns:1fr 1fr;gap:16px; }
+.rl-comparison section,.rl-list-item { padding:16px;background:#ffffff06;border:1px solid #718278;border-radius:8px;min-width:0;margin-bottom:12px; }
+.rl-verbatim { white-space:pre-wrap; }
+@media(max-width:600px){.rl-content{padding:20px 16px}.rl-actions{flex-direction:column}.rl-actions button{width:100%}.rl-comparison{grid-template-columns:1fr}.rl-dialog h2{font-size:21px}}
+@media(forced-colors:active){.rl-dialog,.rl-dialog button,.rl-dialog textarea{border-color:CanvasText}.rl-dialog :focus-visible{outline-color:Highlight}}
