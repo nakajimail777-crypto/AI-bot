@@ -10,6 +10,7 @@ test('lab guide uses existing persona and Gemini, avoids RAG and saves separatel
   const generated=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body),prompt=generated.systemInstruction.parts[0].text;
   assert.match(prompt,/温かく静かに対話/);assert.match(prompt,/反応の実験室：選択/);assert.match(prompt,/採点しない/);
   assert.match(prompt,candidates?/最大3つ/:/改善案・行動課題を勝手に提示せず/);
+    assert.match(generated.contents.at(-1).parts[0].text,candidates?/候補を希望/:/観察の相談/);
   assert.ok(!s.calls.some(c=>c.url.includes(':embedContent')||c.url.includes('/memories?')));
   const saved=JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body);assert.match(saved.p_message,/［反応の実験室：選択/);
   assert.ok(!s.calls.some(c=>c.url.includes('reaction_experiments')));
