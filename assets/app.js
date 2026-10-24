@@ -1,5 +1,9 @@
 const $ = id => document.getElementById(id);
 const input = $('messageInput'), send = $('sendButton'), messages = $('messages');
+const explorationMenu = document.querySelector('.exploration-menu');
+document.addEventListener('click', event => {
+ if (explorationMenu?.open && !explorationMenu.contains(event.target)) explorationMenu.open = false;
+});
 let db, session = null, activeId = null, busy = false, ready = false, epoch = 0, pending = null, rows = [], chats = [];
 // Reflection uses the same authenticated client; it never enters chat requests automatically.
 globalThis.getDragonReflectionContext=()=>({db,userId:session?.user?.is_anonymous?null:session?.user?.id||null});

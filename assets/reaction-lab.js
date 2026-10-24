@@ -13,7 +13,7 @@ function mount(){
  dialog.append(content,live);document.body.append(dialog,confirm);
  let data=createExperiment(),revision=null,saved=null,savedAt=null,screen='home',origin=entry;
  let context={db:null,userId:null,generation:0},busy=false,controller=null,listToken=0,offset=0;
- let conversation=null,pending=null,consultText='',answer='',importData=null;
+ let conversation=null,pending=null,consultText='',answer='',importData=null,consultOrigin='card',consultStep=0;
  const storage=createLabStorage(()=>context);
  const fingerprint=()=>JSON.stringify(data);
  const hasInput=()=>Object.values(data.fields).some(Boolean)||data.step>0||data.choice!=='undecided'||data.attempt!=='not_yet';
@@ -27,7 +27,8 @@ function mount(){
   }else context={...context,...next};
  }
  document.addEventListener('dragon-reflection-session',sync);sync();
- function reset(next=createExperiment()){data=next;revision=null;saved=null;savedAt=null;conversation=null;pending=null;answer='';consultText='';}
+ function reset(next=createExperiment()){data=next;revision=null;saved=null;savedAt=null;conversation=null;pending=null;answer='';consultText='';consultOrigin='card';consultStep=0;}
+ function startConsult(from){consultOrigin=from;consultStep=from==='result'?4:data.step;consultText=consultationText({...data,step:consultStep});answer='';show('consult');}
  function show(next){if(busy)return;screen=next;render();}
  function open(){origin=document.activeElement;dialog.showModal();show('home');}
  entry.addEventListener('click',open);
@@ -92,8 +93,8 @@ function mount(){
    for(const [key,title]of groups[data.step])content.append(field(key,title));
    if(data.step===2)content.append(node('p','今の反応を変えない場合、次の反応の欄は空欄でも大丈夫です。'));
    if(data.step===3)content.append(actions(button('あとで試す',()=>{data.status='planned';exit(true);}),button('今回は見送る',()=>{data.attempt='skipped';data.status='skipped';show('result');})));
-   content.append(actions(button(data.step?'戻る':'入口へ',()=>{if(data.step){data.step--;show('card');}else show('home');}),button(data.step===4?'前後を見比べる':'次へ',()=>{if(!valid())return;if(data.step===4)show('result');else {data.step++;show('card');}})));
-   content.append(actions(button('スピリットドラゴンに相談する',()=>{consultText=consultationText(data);answer='';show('consult');}),button('あとで続ける',()=>exit(true)),button('ここまでで終える',()=>exit())));
+   content.append(actions(button(data.step===4?'前後を見比べる':'次へ',()=>{if(!valid())return;if(data.step===4)show('result');else {data.step++;show('card');}}),button(data.step?'戻る':'入口へ',()=>{if(data.step){data.step--;show('card');}else show('home');})));
+   content.append(actions(button('スピリットドラゴンに相談する',()=>startConsult('card')),button('あとで続ける',()=>exit(true)),button('ここまでで終える',()=>exit())));
   }else if(screen==='result'){
    heading('試す前と、試した後','変化がなくても、まだ試していなくても大丈夫です。ここにあるのは、あなたが書いた言葉です。');
    const grid=node('div','',{class:'rl-comparison'});
@@ -101,6 +102,7 @@ function mount(){
     const section=node('section');section.append(node('h3',title));for(const [label,value]of items)section.append(node('h4',label),node('p',value||'未入力',{class:'rl-verbatim'}));grid.append(section);
    }
    content.append(node('p',data.attempt==='not_yet'?'まだ試していません。':data.attempt==='skipped'?'今回は見送っています。':'試した内容を振り返っています。'),grid);
+   content.append(actions(button('この振り返りをスピリットドラゴンに相談する',()=>startConsult('result'))));
    content.append(actions(button('記録を保存する',()=>{data.status=data.attempt==='skipped'?'skipped':'finished';save();}),button('内容を編集する',()=>show('card')),button('もう一度試す',()=>repeat(false)),button('少し変えて試す',()=>repeat(true)),button('ここで終える',()=>exit())));
   }else if(screen==='list')renderList();
   else if(screen==='consult')renderConsult();
@@ -154,13 +156,13 @@ function mount(){
   const count=node('p','',{id:'rl-consult-count'});
   const update=()=>{consultText=area.value;count.textContent=`${consultText.length} / 3,900文字。長い場合は送る部分を選んでください。元の記録は変更しません。`;};area.addEventListener('input',update);update();
   content.append(node('label','相談に送る文章',{for:'rl-consult-text'}),area,count);
-  const buttons=[button('この内容を相談する',()=>consult(false))];if(data.step===2)buttons.push(button('候補を最大3つ相談する',()=>consult(true)));
-  content.append(actions(...buttons,button('相談せず戻る',()=>show('card'))));
+  const buttons=[button('この内容を相談する',()=>consult(false))];if(consultStep===2)buttons.push(button('候補を最大3つ相談する',()=>consult(true)));
+  content.append(actions(...buttons,button(consultOrigin==='result'?'前後の比較に戻る':'相談せず戻る',()=>show(consultOrigin))));
   if(answer){content.append(node('h3','スピリットドラゴンの返答'),node('p',answer,{class:'rl-verbatim'}),node('p','この返答は実験記録に反映していません。使いたい部分があれば、戻って自分の言葉で記入できます。'),button('戻って自分の言葉で記入する',()=>show('card')));}
  }
  async function consult(candidates){
   if(!consultText.trim()||consultText.length>3900){announce('相談する文章を1〜3,900文字にしてください。元の記録は変更しません。');return;}
-  const text=consultText.trim(),step=data.step,key=JSON.stringify({text,step,candidates});
+  const text=consultText.trim(),step=consultStep,key=JSON.stringify({text,step,candidates});
   const consultationGeneration=context.generation;
   controller=new AbortController();const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(85000)]);
   await operation(async generation=>{
