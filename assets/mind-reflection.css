@@ -45,3 +45,25 @@
 .mr-terms { border:1px solid #718278; padding:16px; border-radius:10px; margin:16px 0; }
 @media(max-width:600px) { .mr-content { padding:20px 16px; } .mr-field { padding:14px 12px; } .mr-actions { flex-direction:column; } .mr-actions button { width:100%; } .mr-dialog { border-radius:12px; } }
 @media(forced-colors:active) { .mr-dialog, .mr-dialog textarea, .mr-dialog button, .mr-option, .mr-field { border-color:CanvasText; } .mr-dialog :focus-visible, .mr-entry :focus-visible { outline-color:Highlight; } .mr-option:has(input:checked) { border-color:Highlight; } .mr-dialog .mr-error { color:CanvasText; } }
+
+/* Explicit reflection map, outside the modal so the composer stays available. */
+.mr-map { box-sizing:border-box; max-width:760px; margin:0 auto 24px; padding:20px; border:1px solid #65776f; border-radius:16px; background:#232725; color:#f1f1ef; font-size:16px; }
+.mr-map[hidden], .mr-map [hidden] { display:none !important; }
+.mr-map h2 { font-size:22px; margin:0 0 12px; }
+.mr-map .mr-map-note { color:#c3cec8; font-size:13px; line-height:1.8; overflow-wrap:anywhere; }
+.mr-map-controls { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+.mr-map button { font:inherit; font-size:14px; color:inherit; background:#303932; border:1px solid #82958a; border-radius:9px; min-height:44px; padding:10px 14px; cursor:pointer; white-space:normal; overflow-wrap:anywhere; }
+.mr-map button:focus-visible { outline:3px solid #d5f6e6; outline-offset:3px; }
+.mr-map button:hover { background:#3b493f; }
+.mr-map-cards { list-style:none; padding:0; margin:20px 0; }
+.mr-map-card { --map-color:#a9cfff; border:1px solid #647585; border-left:4px solid var(--map-color); border-radius:12px; padding:16px; background:#29313b; min-width:0; }
+.mr-map-feeling { --map-color:#f4b6d0; background:#372b33; border-color:#856475; border-left-color:var(--map-color); }
+.mr-map-interpretation { --map-color:#edd795; background:#363326; border-color:#82764f; border-left-color:var(--map-color); }
+.mr-map-reaction { --map-color:#a5dcc3; background:#273830; border-color:#5c8070; border-left-color:var(--map-color); }
+.mr-map-afterglow { --map-color:#d3baff; background:#322e3d; border-color:#7c6b95; border-left-color:var(--map-color); }
+.mr-map-card h3 { color:var(--map-color); font-size:17px; line-height:1.6; margin:0 0 8px; }
+.mr-map-icon { display:inline-block; width:1.8em; }
+.mr-map-card p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.9; }
+.mr-map-arrow { text-align:center; color:#b9c8c1; padding:8px; font-size:22px; }
+@media(max-width:600px) { .mr-map { padding:16px 12px; } .mr-map-card { padding:14px 12px; } .mr-map-controls { flex-direction:column; } .mr-map button { width:100%; } }
+@media(forced-colors:active) { .mr-map, .mr-map-card, .mr-map button { border-color:CanvasText; } .mr-map button:focus-visible { outline-color:Highlight; } }

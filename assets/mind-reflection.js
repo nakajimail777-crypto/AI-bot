@@ -1,3 +1,4 @@
+import {createMindMap} from './mind-map.js';
 // Explicit user-owned storage; reflection contents are not sent to AI automatically.
 import {createStorage,storageMessage} from './mind-reflection-storage.js';
 export const feelings = ['不安','うれしい','いらだち','悲しさ','安心','戸惑い','特にわからない'];
@@ -64,6 +65,7 @@ function mount() {
   let trigger=null, closing=false, confirmTrigger=null, exitTarget=null, shareText='';
   let connection={db:null,userId:null,generation:0}, saving=false, savedFields=null, draftFields=null;
   let savedAt=null, revisions={draft:null,record:null}, listVersion=0, pendingRetry=null;
+  const map=createMindMap(document.getElementById('conversation'),source=>open('result',source));
   const storage=createStorage(()=>({...connection}));
   const fingerprint=()=>JSON.stringify(reflection.fields);
   const isSaved=()=>savedFields===fingerprint();
@@ -72,6 +74,7 @@ function mount() {
     const next=globalThis.getDragonReflectionContext?.()||{db:null,userId:null};
     if(next.userId!==connection.userId){
       connection={...next,generation:connection.generation+1};listVersion++;
+      map.clear();
       if(connectionPreviousUser){
         reflection=createReflection();started=false;savedFields=null;draftFields=null;savedAt=null;revisions={draft:null,record:null};shareText='';saving=false;pendingRetry=null;
         if(confirmation.open)confirmation.close();if(dialog.open){view={screen:'home'};render();announce('利用者が切り替わりました。前の利用者の入力は画面から消去しました。');}
@@ -94,6 +97,7 @@ function mount() {
   function begin(){started=true;go({screen:'observe'});}
   function go(next,edit=false){
     if(saving){announce('保存中です。完了するまでお待ちください。');return;}
+    if(next.screen==='observe'||next.screen==='list')map.clear();
     view=next; depth++;
     history.pushState({...history.state,mindReflection:{token,depth,view}},'');
     render(edit);
@@ -115,10 +119,12 @@ function mount() {
   }
   function restoreTrigger(){
     if(exitTarget){entry.closest('.exploration-menu').open=false;focus(exitTarget);exitTarget=null;return;}
+    const mapTrigger=trigger?.closest('.mr-map');
+    if(mapTrigger&&!mapTrigger.hidden){focus(trigger);return;}
     entry.open=true;
     entry.closest('.self-exploration').open=true;
     entry.closest('.exploration-menu').open=true;
-    trigger?.focus();
+    (mapTrigger?entry.querySelector('[data-mr-open]'):trigger)?.focus();
   }
   function closeRequest(){
     if(saving){announce('保存中です。完了するまでお待ちください。');return;}
@@ -182,6 +188,7 @@ function mount() {
         break;
       case 'result':
         header('あなたの心の動き','出来事、感じたこと、受け取り方、反応、そして振り返って感じることを整理しました。','振り返り');
+        content.append(button('図で見る',()=>{const target=map.show(reflection);end(target);},true),el('p',{},'入力した内容を5枚のカードで表示します。図を見ながら会話を続けられます。図の表示だけでは保存・AI送信されません。'));
         results();
         content.append(button('この振り返りから実験する',()=>{
           if(!globalThis.openReactionLabFromReflection){announce('実験室を読み込めませんでした。入力は保持されています。');return;}
@@ -206,6 +213,7 @@ function mount() {
     focus(target||content.querySelector('h2'));
   }
   function observe(){
+    map.clear();
     header('今日の心の動きを振り返る','最近印象に残った出来事を一つ選び、そこから心の動きを順番に見ていきます。うまく説明できなくても大丈夫です。','観察 · 5つの項目');
     content.append(el('p',{},'すべて任意です。空欄のまま進めます。スキップした内容は、解除すると元に戻ります。'));
     const errors=el('div',{className:'mr-errors',hidden:true,tabIndex:-1,role:'alert'});
@@ -375,7 +383,7 @@ function mount() {
             const restored=restoreReflection(latest.payload);
             const record=kind==='record'?latest:await storage.get(row.id,'record');
             if(version!==connection.generation)return;
-            reflection=restored;started=true;savedAt=record?.saved_at||null;savedFields=record?JSON.stringify(restoreReflection(record.payload).fields):null;
+            map.clear();reflection=restored;started=true;savedAt=record?.saved_at||null;savedFields=record?JSON.stringify(restoreReflection(record.payload).fields):null;
             revisions={draft:kind==='draft'?latest.revision:null,record:record?.revision||null};draftFields=kind==='draft'?fingerprint():null;
             go({screen:kind==='draft'?'observe':'result'});
           }catch(error){announce(storageMessage(error));focus(live);}
