@@ -11,7 +11,7 @@ function setup(){
   return nodes.get(id);
  };
  let finish,requested;
- const context=vm.createContext({document:{getElementById:element,querySelector:()=>({open:true}),querySelectorAll:()=>[]},location:{search:''},window:{},crypto:{randomUUID},setTimeout,clearTimeout,setInterval:()=>0,AbortSignal,URL,Blob,sessionStorage:{setItem(){},getItem(){return null;}},fetch:async(url,init)=>{requested={url,body:JSON.parse(init.body)};return new Promise(resolve=>{finish=resolve;});}});
+ const context=vm.createContext({document:{addEventListener(){},getElementById:element,querySelector:()=>({open:true}),querySelectorAll:()=>[]},location:{search:''},window:{},crypto:{randomUUID},setTimeout,clearTimeout,setInterval:()=>0,AbortSignal,URL,Blob,sessionStorage:{setItem(){},getItem(){return null;}},fetch:async(url,init)=>{requested={url,body:JSON.parse(init.body)};return new Promise(resolve=>{finish=resolve;});}});
  vm.runInContext(source,context);
  vm.runInContext(`ready=true;session={user:{id:'user'}};activeId='chat';selfReturn=true;globalThis.originalControls=controls;
  db={auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}};
@@ -53,7 +53,7 @@ for(const change of ['leaveSelfReturn();','responseVersion++;','epoch++;'])test(
  s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'new draft');
 });
 
-test('deep activation and exit keep the conversation and draft, other routes have no handlers',async()=>{
+test('deep activation and exit keep the conversation and draft',async()=>{
  const s=setup();s.element('messageInput').value='下書き';
  s.element('deepExploration').onclick();await new Promise(resolve=>setImmediate(resolve));
  assert.equal(s.requested.body.conversationId,'chat');assert.equal(s.requested.body.deepExploration,true);assert.equal(s.requested.body.selfReturn,false);assert.equal(s.requested.body.modeStart,true);
@@ -64,5 +64,20 @@ test('deep activation and exit keep the conversation and draft, other routes hav
 test('selecting an existing mode exits deep exploration',()=>{
  for(const id of ['selfReturn','skyGazing','emotionFocus','blindSpot','returnPath','seikanMode']){
  const s=setup();vm.runInContext('deepExploration=true;selfReturn=false;submitMessage=()=>{};',s.context);s.element(id).onclick();assert.equal(vm.runInContext('deepExploration',s.context),false);
+ }
+});
+
+test('pattern activation and exit preserve conversation, selected memory and draft',async()=>{
+ const s=setup();s.element('messageInput').value='未送信';vm.runInContext("selectedMemory={id:'memory'}",s.context);
+ s.element('patternExploration').onclick();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(s.requested.body.patternExploration,true);assert.equal(s.requested.body.deepExploration,false);assert.equal(s.requested.body.selfReturn,false);assert.equal(s.requested.body.message,'');assert.equal(s.requested.body.conversationId,'chat');assert.equal(s.requested.body.memoryId,undefined);
+ s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'未送信');assert.equal(vm.runInContext('selectedMemory.id',s.context),'memory');
+ s.element('endDeepExploration').onclick();assert.equal(vm.runInContext('patternExploration',s.context),false);assert.equal(vm.runInContext('activeId',s.context),'chat');
+});
+test('other modes exit pattern and mode label reflects selection',()=>{
+ for(const id of ['deepExploration','selfReturn','skyGazing','emotionFocus','blindSpot','returnPath','seikanMode']){
+ const s=setup();vm.runInContext('patternExploration=true;selfReturn=false;originalControls();submitMessage=()=>{};',s.context);
+ assert.equal(s.element('deepExplorationLabel').textContent,'自己探索 ＞ パターンを見る');
+ s.element(id).onclick();assert.equal(vm.runInContext('patternExploration',s.context),false);
  }
 });

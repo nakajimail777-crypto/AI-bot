@@ -280,3 +280,28 @@ test('leaving deep mode resets its instructions while keeping history',async()=>
  assert.doesNotMatch(body.systemInstruction.parts[0].text,/【自己探索：深く降りる】/);
  assert.match(body.contents[0].parts[0].text,/焦り/);
 });
+
+for(const modeStart of [true,false])test('pattern route preserves conversation and generates once: '+modeStart,async()=>{
+ const s=setup();const message=modeStart?'':'誘いを断った。疲れていた';
+ assert.equal((await s.invoke({body:{message,conversationId:chat,requestId:request,patternExploration:true,modeStart}})).code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);
+ const body=JSON.parse(models[0].init.body);assert.equal(body.contents[0].parts[0].text,'前の質問');
+ assert.match(body.systemInstruction.parts[0].text,/自己探索：パターンを見る/);
+ assert.match(body.systemInstruction.parts[0].text,/疲れ、体調、時間不足/);
+ assert.match(body.systemInstruction.parts[0].text,/反例/);
+ assert.ok(!s.calls.some(c=>c.url.includes(':embedContent')||c.url.includes('/memories?')));
+ assert.equal(JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message,modeStart?'［パターンを見るを選択］':message+'\n\n［パターンを見る］');
+});
+test('pattern validation rejects conflicting modes and malformed flags before calls',async()=>{
+ for(const flags of [{patternExploration:'yes'},...['deepExploration','selfReturn','skyGazing','seikanMode','blindSpot','emotionFocus','encouragement','returnPath'].map(k=>({patternExploration:true,[k]:true})),{patternExploration:true,reactionLab:{step:0,candidates:false}}]){
+ const s=setup();assert.equal((await s.invoke({body:{message:'test',conversationId:chat,requestId:request,...flags}})).code,400);assert.equal(s.calls.length,0);
+ }
+});
+test('leaving pattern keeps history but removes active rules',async()=>{
+ const s=setup({history:[{role:'user',content:'断った\n\n［パターンを見る］',sequence:1}]});await s.invoke();
+ const body=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+ assert.match(body.systemInstruction.parts[0].text,/パターン探索の終了/);assert.doesNotMatch(body.systemInstruction.parts[0].text,/【自己探索：パターンを見る】/);assert.match(body.contents[0].parts[0].text,/断った/);
+});
+test('pattern retry identity cannot reuse ordinary turn',async()=>{
+ const s=setup({prior:[{role:'user',content:'こんにちは'}]});assert.equal((await s.invoke({body:{message:'こんにちは',conversationId:chat,requestId:request,patternExploration:true}})).code,409);
+});

@@ -122,3 +122,14 @@ test('guest deep mode uses existing history and a single generation',async()=>{
  assert.match(models[0].body.systemInstruction.parts[0].text,/自己探索：深く降りる/);
  assert.equal(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,'［深く降りるを選択］');
 });
+
+for(const modeStart of [true,false])test('guest pattern uses same scoped rules: '+modeStart,async()=>{
+ const s=setup();assert.equal((await s.invoke({body:{message:modeStart?'':'断った',requestId:randomUUID(),patternExploration:true,modeStart}})).code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);assert.match(models[0].body.systemInstruction.parts[0].text,/自己探索：パターンを見る/);
+ assert.equal(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,modeStart?'［パターンを見るを選択］':'断った\n\n［パターンを見る］');
+});
+test('guest pattern rejects invalid and conflicting flags',async()=>{
+ for(const flags of [{patternExploration:'yes'},{patternExploration:true,deepExploration:true},{patternExploration:true,selfReturn:true}]){
+ const s=setup();assert.equal((await s.invoke({body:{message:'test',requestId:randomUUID(),...flags}})).code,400);assert.equal(s.calls.length,0);
+ }
+});
