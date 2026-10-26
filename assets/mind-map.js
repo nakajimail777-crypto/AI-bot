@@ -38,7 +38,7 @@ export function createMindMap(host, onReturn) {
   expand(false);
   return {
     context(message){
-      if(panel.hidden||cards.hidden||!/(?:この図|図解|心の動き|マップ|このカード|この内容|こちら|これ(?!から)|それ)/.test(message))return null;
+      if(panel.hidden||cards.hidden||!/(?:この図|図解|(?:^|[^\p{Script=Han}])図(?=は|が|を|に|の|も|って|[？?]|$)|心の動き|マップ|このカード|この内容|こちら|これ(?!から)|それ)/u.test(message))return null;
       return structuredClone(snapshot);
     },
     show(reflection){

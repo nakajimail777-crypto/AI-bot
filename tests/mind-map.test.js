@@ -34,10 +34,10 @@ test('map is opt-in, accessible, reusable and removable, and treats HTML as text
 test('only the open current snapshot is supplied for map references',()=>{
  const host=dom(),map=createMindMap(host,()=>{}),r=sample();r.fields.event.value='現在の図';
  assert.equal(map.context('この図を見て'),null);const toggle=map.show(r);
- for(const text of ['この図を見てどう思う？','これを見てどう思いますか？','心の動きの図解'])assert.equal(map.context(text).fields.event,'現在の図');
- assert.equal(map.context('こんにちは'),null);assert.equal(map.context('これから散歩します'),null);
+ for(const text of ['この図を見てどう思う？','これを見てどう思いますか？','心の動きの図解','図は見れますか？','図が見えますか？','図を見て','この図の内容を教えて'])assert.equal(map.context(text).fields.event,'現在の図');
+ assert.equal(map.context('図書館に行きます'),null);assert.equal(map.context('意図は何ですか？'),null);assert.equal(map.context('こんにちは'),null);assert.equal(map.context('これから散歩します'),null);
  r.fields.event.value='未反映の編集';assert.equal(map.context('これ').fields.event,'現在の図');
  const copy=map.context('これ');copy.fields.event='改変';assert.equal(map.context('これ').fields.event,'現在の図');
- toggle.listeners.click();assert.equal(map.context('この図'),null);toggle.listeners.click();assert.equal(map.context('この図').fields.event,'現在の図');
+ toggle.listeners.click();assert.equal(map.context('この図'),null);assert.equal(map.context('図は見れますか？'),null);toggle.listeners.click();assert.equal(map.context('この図').fields.event,'現在の図');
  map.show(r);assert.equal(map.context('これ').fields.event,'未反映の編集');map.clear();assert.equal(map.context('これ'),null);
 });
