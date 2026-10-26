@@ -334,3 +334,28 @@ test('map hash scopes retry identity to exact visible contents',async()=>{
  const same=setup({prior:[{role:'user',content}]});assert.equal((await same.invoke({body:{message:'これ',conversationId:chat,requestId:request,mindMap:mapFixture}})).code,200);assert.ok(!same.calls.some(c=>c.url.includes(':generateContent')));
  const changed=setup({prior:[{role:'user',content}]});assert.equal((await changed.invoke({body:{message:'これ',conversationId:chat,requestId:request,mindMap:{...mapFixture,fields:{...mapFixture.fields,event:'別の図'}}}})).code,409);
 });
+
+for(const modeStart of [true,false])test('direction route preserves conversation and generates once: '+modeStart,async()=>{
+ const s=setup();const message=modeStart?'':'誘いを断った。疲れていた';
+ assert.equal((await s.invoke({body:{message,conversationId:chat,requestId:request,directionExploration:true,modeStart}})).code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);
+ const body=JSON.parse(models[0].init.body);assert.equal(body.contents[0].parts[0].text,'前の質問');
+ assert.match(body.systemInstruction.parts[0].text,/自己探索：方角を見る/);
+ assert.match(body.systemInstruction.parts[0].text,/現実の制約/);
+ assert.match(body.systemInstruction.parts[0].text,/まだ決めない/);
+ assert.ok(!s.calls.some(c=>c.url.includes(':embedContent')||c.url.includes('/memories?')));
+ assert.equal(JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message,modeStart?'［方角を見るを選択］':message+'\n\n［方角を見る］');
+});
+test('direction validation rejects conflicting modes and malformed flags before calls',async()=>{
+ for(const flags of [{directionExploration:'yes'},...['patternExploration','deepExploration','selfReturn','skyGazing','seikanMode','blindSpot','emotionFocus','encouragement','returnPath'].map(k=>({directionExploration:true,[k]:true})),{directionExploration:true,reactionLab:{step:0,candidates:false}}]){
+ const s=setup();assert.equal((await s.invoke({body:{message:'test',conversationId:chat,requestId:request,...flags}})).code,400);assert.equal(s.calls.length,0);
+ }
+});
+test('leaving direction keeps history but removes active rules',async()=>{
+ const s=setup({history:[{role:'user',content:'断った\n\n［方角を見る］',sequence:1}]});await s.invoke();
+ const body=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+ assert.match(body.systemInstruction.parts[0].text,/方角探索の終了/);assert.doesNotMatch(body.systemInstruction.parts[0].text,/【自己探索：方角を見る】/);assert.match(body.contents[0].parts[0].text,/断った/);
+});
+test('direction retry identity cannot reuse ordinary turn',async()=>{
+ const s=setup({prior:[{role:'user',content:'こんにちは'}]});assert.equal((await s.invoke({body:{message:'こんにちは',conversationId:chat,requestId:request,directionExploration:true}})).code,409);
+});

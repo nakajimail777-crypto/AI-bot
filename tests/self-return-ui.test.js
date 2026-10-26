@@ -91,3 +91,34 @@ test('client sends map snapshot only on ordinary sends and refreshes retry id wh
  vm.runInContext("globalThis.getDragonMindMapContext=()=>{throw Error('must not read map')};patternExploration=true;",s.context);
  vm.runInContext('submitMessage(true)',s.context);await new Promise(resolve=>setImmediate(resolve));assert.equal(s.requested.body.mindMap,null);s.respond();await s.context.completed;
 });
+
+test('direction activation and exit preserve conversation, selected memory and draft',async()=>{
+ const s=setup();s.element('messageInput').value='未送信';vm.runInContext("selectedMemory={id:'memory'}",s.context);
+ s.element('directionExploration').onclick();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(s.requested.body.directionExploration,true);assert.equal(s.requested.body.deepExploration,false);assert.equal(s.requested.body.selfReturn,false);assert.equal(s.requested.body.message,'');assert.equal(s.requested.body.conversationId,'chat');assert.equal(s.requested.body.memoryId,undefined);
+ s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'未送信');assert.equal(vm.runInContext('selectedMemory.id',s.context),'memory');
+ s.element('endDeepExploration').onclick();assert.equal(vm.runInContext('directionExploration',s.context),false);assert.equal(vm.runInContext('activeId',s.context),'chat');
+});
+test('other modes exit direction and mode label reflects selection',()=>{
+ for(const id of ['patternExploration','deepExploration','selfReturn','skyGazing','emotionFocus','blindSpot','returnPath','seikanMode']){
+ const s=setup();vm.runInContext('directionExploration=true;selfReturn=false;originalControls();submitMessage=()=>{};',s.context);
+ assert.equal(s.element('deepExplorationLabel').textContent,'自己探索 ＞ 方角を見る');
+ s.element(id).onclick();assert.equal(vm.runInContext('directionExploration',s.context),false);
+ }
+});
+
+
+test('direction guest activation uses the existing guest endpoint and preserves draft',async()=>{
+ const s=setup();vm.runInContext('session=null;trialReady=true;trialRemaining=5;selfReturn=false;loadTrial=async()=>{};',s.context);s.element('messageInput').value='まだ送らない';
+ s.element('directionExploration').onclick();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(s.requested.url,'/api/guest-chat');assert.equal(s.requested.body.directionExploration,true);assert.equal(s.requested.body.message,'');assert.equal(s.requested.body.modeStart,true);
+ s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'まだ送らない');
+});
+test('direction survives draft serialization and switching to pattern clears it',()=>{
+ const s=setup();let saved;s.context.sessionStorage.setItem=(key,value)=>{saved=JSON.parse(value);};
+ vm.runInContext("directionExploration=true;selfReturn=false;submitMessage=()=>{};",s.context);
+ // Run the original serializer, which setup replaces only to isolate other tests.
+ const serializer=source.slice(source.indexOf('function rememberDraft()'),source.indexOf('async function copyAnswerText'));
+ vm.runInContext(serializer+'\nrememberDraft();',s.context);assert.equal(saved.directionExploration,true);
+ s.element('patternExploration').onclick();assert.equal(vm.runInContext('directionExploration',s.context),false);assert.equal(saved.directionExploration,false);assert.equal(saved.patternExploration,true);
+});

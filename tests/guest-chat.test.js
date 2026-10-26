@@ -141,3 +141,14 @@ test('guest map is attached to the existing generation and scoped to the reserve
  assert.match(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,/参照した心の動きマップ/);
  const invalid=setup();assert.equal((await invalid.invoke({body:{message:'これ',requestId:randomUUID(),mindMap:{}}})).code,400);assert.equal(invalid.calls.length,0);
 });
+
+for(const modeStart of [true,false])test('guest direction uses same scoped rules: '+modeStart,async()=>{
+ const s=setup();assert.equal((await s.invoke({body:{message:modeStart?'':'断った',requestId:randomUUID(),directionExploration:true,modeStart}})).code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);assert.match(models[0].body.systemInstruction.parts[0].text,/自己探索：方角を見る/);
+ assert.equal(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,modeStart?'［方角を見るを選択］':'断った\n\n［方角を見る］');
+});
+test('guest direction rejects invalid and conflicting flags',async()=>{
+ for(const flags of [{directionExploration:'yes'},{directionExploration:true,deepExploration:true},{directionExploration:true,selfReturn:true}]){
+ const s=setup();assert.equal((await s.invoke({body:{message:'test',requestId:randomUUID(),...flags}})).code,400);assert.equal(s.calls.length,0);
+ }
+});
