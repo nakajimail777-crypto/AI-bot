@@ -131,3 +131,8 @@ for(const guest of [false,true])test(`${guest?'guest':'signed-in'} handler handl
  const invalid=response();await (guest?createGuestHandler:createHandler)({env,fetcher})({method:'POST',headers:{authorization:'Bearer test'},body:{message:'',conversationId,requestId,modeStart:true}},invalid);
  assert.equal(invalid.code,400);
 });
+test('current map stays out of self-return classification and uses the existing reply generation',async()=>{
+ const calls=[],mindMap={version:1,id:'11111111-1111-4111-8111-111111111111',fields:{event:'架空の例：MAP_ONLY_DATA',feeling:'不明',interpretation:'不明',reaction:'なし',afterglow:'よくわからない'}};
+ await selfReturnReply({message:'この図について',mindMap,fetcher:async(_,init)=>{calls.push(JSON.parse(init.body));return modelResponse(calls.length===1?JSON.stringify(decision()):'図に書かれた内容として受け止めます。');}});
+ assert.equal(calls.length,2);assert.doesNotMatch(JSON.stringify(calls[0]),/MAP_ONLY_DATA/);assert.match(JSON.stringify(calls[1].contents),/MAP_ONLY_DATA/);assert.match(calls[1].systemInstruction.parts[0].text,/本人の実体験として語らない/);
+});

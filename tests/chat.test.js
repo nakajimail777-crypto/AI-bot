@@ -305,3 +305,32 @@ test('leaving pattern keeps history but removes active rules',async()=>{
 test('pattern retry identity cannot reuse ordinary turn',async()=>{
  const s=setup({prior:[{role:'user',content:'こんにちは'}]});assert.equal((await s.invoke({body:{message:'こんにちは',conversationId:chat,requestId:request,patternExploration:true}})).code,409);
 });
+
+const mapFixture={version:1,id:'11111111-1111-4111-8111-111111111111',fields:{event:'公開確認用の架空の例：散歩',feeling:'涼しい',interpretation:'歩きやすい',reaction:'歩いた',afterglow:'よくわからない'}};
+test('current map goes only to generation as structured data, with one generation and no memory writes',async()=>{
+ const s=setup();assert.equal((await s.invoke({body:{message:'これを見てどう思いますか？',conversationId:chat,requestId:request,mindMap:mapFixture}})).code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);
+ const body=JSON.parse(models[0].init.body),rules=body.systemInstruction.parts[0].text;
+ assert.match(rules,/画像認識は不要/);assert.match(rules,/本人の実体験として語らない/);assert.ok(!rules.includes('涼しい'));
+ assert.equal(body.contents.at(-1).parts[0].text,'これを見てどう思いますか？');assert.ok(body.contents.at(-1).parts[1].text.includes(JSON.stringify(mapFixture)));
+ assert.equal(body.contents[0].parts[0].text,'前の質問');
+ const saved=JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message;assert.match(saved,/参照した心の動きマップ：[a-f0-9]{64}/);assert.ok(!saved.includes('涼しい'));
+ assert.ok(!s.calls.filter(c=>c.url.startsWith(env.SUPABASE_URL)).some(c=>c.init.body?.includes('涼しい')));
+});
+test('map absent after closing never borrows old diagram content',async()=>{
+ const s=setup({history:[{role:'user',content:'前の図\n［参照した心の動きマップ：old］',sequence:1}]});await s.invoke({body:{message:'この図は？',conversationId:chat,requestId:request}});
+ const body=JSON.parse(s.calls.find(c=>c.url.includes(':generateContent')).init.body);
+ assert.match(body.systemInstruction.parts[0].text,/現在のマップデータがない/);assert.match(body.systemInstruction.parts[0].text,/現在の図として代用しない/);assert.equal(body.contents.at(-1).parts.length,1);
+});
+test('invalid map and mixed activation are rejected before external calls',async()=>{
+ for(const mindMap of [[],{},'bad',{...mapFixture,fields:{...mapFixture.fields,extra:'x'}},{...mapFixture,fields:{...mapFixture.fields,event:'x'.repeat(4201)}}]){
+ const s=setup();assert.equal((await s.invoke({body:{message:'これ',conversationId:chat,requestId:request,mindMap}})).code,400);assert.equal(s.calls.length,0);
+ }
+ const s=setup();assert.equal((await s.invoke({body:{message:'',conversationId:chat,requestId:request,modeStart:true,patternExploration:true,mindMap:mapFixture}})).code,400);assert.equal(s.calls.length,0);
+});
+test('map hash scopes retry identity to exact visible contents',async()=>{
+ const first=setup();await first.invoke({body:{message:'これ',conversationId:chat,requestId:request,mindMap:mapFixture}});
+ const content=JSON.parse(first.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message;
+ const same=setup({prior:[{role:'user',content}]});assert.equal((await same.invoke({body:{message:'これ',conversationId:chat,requestId:request,mindMap:mapFixture}})).code,200);assert.ok(!same.calls.some(c=>c.url.includes(':generateContent')));
+ const changed=setup({prior:[{role:'user',content}]});assert.equal((await changed.invoke({body:{message:'これ',conversationId:chat,requestId:request,mindMap:{...mapFixture,fields:{...mapFixture.fields,event:'別の図'}}}})).code,409);
+});

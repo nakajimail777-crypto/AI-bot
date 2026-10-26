@@ -133,3 +133,11 @@ test('guest pattern rejects invalid and conflicting flags',async()=>{
  const s=setup();assert.equal((await s.invoke({body:{message:'test',requestId:randomUUID(),...flags}})).code,400);assert.equal(s.calls.length,0);
  }
 });
+
+test('guest map is attached to the existing generation and scoped to the reserved request',async()=>{
+ const map={version:1,id:randomUUID(),fields:{event:'架空の例：散歩',feeling:'涼しい',interpretation:'歩きやすい',reaction:'歩いた',afterglow:'よくわからない'}};
+ const s=setup();assert.equal((await s.invoke({body:{message:'この図を見て',requestId:randomUUID(),mindMap:map}})).code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);assert.ok(models[0].body.contents.at(-1).parts[1].text.includes(JSON.stringify(map)));assert.match(models[0].body.systemInstruction.parts[0].text,/本人の実体験として語らない/);
+ assert.match(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,/参照した心の動きマップ/);
+ const invalid=setup();assert.equal((await invalid.invoke({body:{message:'これ',requestId:randomUUID(),mindMap:{}}})).code,400);assert.equal(invalid.calls.length,0);
+});

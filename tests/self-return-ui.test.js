@@ -11,7 +11,7 @@ function setup(){
   return nodes.get(id);
  };
  let finish,requested;
- const context=vm.createContext({document:{addEventListener(){},getElementById:element,querySelector:()=>({open:true}),querySelectorAll:()=>[]},location:{search:''},window:{},crypto:{randomUUID},setTimeout,clearTimeout,setInterval:()=>0,AbortSignal,URL,Blob,sessionStorage:{setItem(){},getItem(){return null;}},fetch:async(url,init)=>{requested={url,body:JSON.parse(init.body)};return new Promise(resolve=>{finish=resolve;});}});
+ const context=vm.createContext({document:{dispatchEvent(){},addEventListener(){},getElementById:element,querySelector:()=>({open:true}),querySelectorAll:()=>[]},location:{search:''},window:{},crypto:{randomUUID},Event,setTimeout,clearTimeout,setInterval:()=>0,AbortSignal,URL,Blob,sessionStorage:{setItem(){},getItem(){return null;}},fetch:async(url,init)=>{requested={url,body:JSON.parse(init.body)};return new Promise(resolve=>{finish=resolve;});}});
  vm.runInContext(source,context);
  vm.runInContext(`ready=true;session={user:{id:'user'}};activeId='chat';selfReturn=true;globalThis.originalControls=controls;
  db={auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}};
@@ -80,4 +80,14 @@ test('other modes exit pattern and mode label reflects selection',()=>{
  assert.equal(s.element('deepExplorationLabel').textContent,'自己探索 ＞ パターンを見る');
  s.element(id).onclick();assert.equal(vm.runInContext('patternExploration',s.context),false);
  }
+});
+
+test('client sends map snapshot only on ordinary sends and refreshes retry id when map changes',async()=>{
+ const s=setup();vm.runInContext("selfReturn=false;globalThis.getDragonMindMapContext=()=>({version:1,id:'map',fields:{event:'first'}})",s.context);
+ s.element('messageInput').value='これ';vm.runInContext('submitMessage()',s.context);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(s.requested.body.mindMap.fields.event,'first');const firstId=s.requested.body.requestId;
+ vm.runInContext("globalThis.getDragonMindMapContext=()=>null",s.context);s.respond();await s.context.completed;
+ s.element('messageInput').value='これ';vm.runInContext('submitMessage()',s.context);await new Promise(resolve=>setImmediate(resolve));assert.equal(s.requested.body.mindMap,null);assert.notEqual(s.requested.body.requestId,firstId);s.respond();await s.context.completed;
+ vm.runInContext("globalThis.getDragonMindMapContext=()=>{throw Error('must not read map')};patternExploration=true;",s.context);
+ vm.runInContext('submitMessage(true)',s.context);await new Promise(resolve=>setImmediate(resolve));assert.equal(s.requested.body.mindMap,null);s.respond();await s.context.completed;
 });

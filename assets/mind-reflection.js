@@ -66,6 +66,8 @@ function mount() {
   let connection={db:null,userId:null,generation:0}, saving=false, savedFields=null, draftFields=null;
   let savedAt=null, revisions={draft:null,record:null}, listVersion=0, pendingRetry=null;
   const map=createMindMap(document.getElementById('conversation'),source=>open('result',source));
+  globalThis.getDragonMindMapContext=message=>dialog.open?null:map.context(message);
+  document.addEventListener('dragon-chat-change',()=>map.clear());
   const storage=createStorage(()=>({...connection}));
   const fingerprint=()=>JSON.stringify(reflection.fields);
   const isSaved=()=>savedFields===fingerprint();
@@ -188,7 +190,7 @@ function mount() {
         break;
       case 'result':
         header('あなたの心の動き','出来事、感じたこと、受け取り方、反応、そして振り返って感じることを整理しました。','振り返り');
-        content.append(button('図で見る',()=>{const target=map.show(reflection);end(target);},true),el('p',{},'入力した内容を5枚のカードで表示します。図を見ながら会話を続けられます。図の表示だけでは保存・AI送信されません。'));
+        content.append(button('図で見る',()=>{const target=map.show(reflection);end(target);},true),el('p',{},'入力した内容を5枚のカードで表示します。図を見ながら会話を続けられます。図を開くだけでは保存・AI送信されません。図に言及して送信すると、5項目がその質問に添えられます。'));
         results();
         content.append(button('この振り返りから実験する',()=>{
           if(!globalThis.openReactionLabFromReflection){announce('実験室を読み込めませんでした。入力は保持されています。');return;}

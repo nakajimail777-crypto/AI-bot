@@ -28,10 +28,11 @@ async function readTrial(version){
 async function sendTrial(modeStart=false){
  if(!trialReady||trialRemaining<=0){$('authDialog').showModal();return;}
  const sentDraft=input.value,text=modeStart?'':sentDraft.trim(),version=epoch,replyVersion=++responseVersion;
+ const mindMap=modeStart?null:(globalThis.getDragonMindMapContext?.(text)||null),mapKey=JSON.stringify(mindMap);
  if(text.length>4000)throw new Error('メッセージは4,000文字以内で入力してください。');
- if(!trialPending||trialPending.text!==text||trialPending.mode!==seikanMode||trialPending.blindSpot!==blindSpot||trialPending.emotionFocus!==emotionFocus||trialPending.encouragement!==encouragement||trialPending.returnPath!==returnPath||trialPending.skyGazing!==skyGazing||trialPending.selfReturn!==selfReturn||trialPending.deepExploration!==deepExploration||trialPending.patternExploration!==patternExploration||trialPending.modeStart!==modeStart)trialPending={text,mode:seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,modeStart,id:crypto.randomUUID()};
+ if(!trialPending||trialPending.text!==text||trialPending.mode!==seikanMode||trialPending.blindSpot!==blindSpot||trialPending.emotionFocus!==emotionFocus||trialPending.encouragement!==encouragement||trialPending.returnPath!==returnPath||trialPending.skyGazing!==skyGazing||trialPending.selfReturn!==selfReturn||trialPending.deepExploration!==deepExploration||trialPending.patternExploration!==patternExploration||trialPending.modeStart!==modeStart||trialPending.mapKey!==mapKey)trialPending={text,mode:seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,modeStart,mapKey,id:crypto.randomUUID()};
  status('返答を考えています…');replyWaiting(true);
- const response=await fetch('/api/guest-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,requestId:trialPending.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,modeStart}),signal:AbortSignal.timeout(85000)});
+ const response=await fetch('/api/guest-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,requestId:trialPending.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,modeStart,mindMap}),signal:AbortSignal.timeout(85000)});
  const data=await response.json();
  if(version!==epoch||session||replyVersion!==responseVersion)return;
  if(!response.ok){
@@ -145,6 +146,7 @@ function controls() {
   $('deepExplorationState').hidden=!(deepExploration||patternExploration);
   $('endDeepExploration').disabled=busy;
   if (ready && !busy && incomingNumbers) {
+    document.dispatchEvent(new Event('dragon-chat-change'));
     const entry = incomingNumbers;
     incomingNumbers = null;
     // Start a fresh signed-in conversation; leave the saved previous draft untouched.
@@ -221,7 +223,7 @@ function controls() {
 }
 function rememberDraft() {
   if (!session) return;
-  try { sessionStorage.setItem(storageKey(),JSON.stringify({ activeId, text:input.value, pending, cooldownUntil, seikanMode, blindSpot, emotionFocus, encouragement, returnPath, skyGazing, selfReturn, deepExploration, patternExploration, selectedMemory })); } catch {}
+  try { sessionStorage.setItem(storageKey(),JSON.stringify({ activeId, text:input.value, pending:pending?{...pending,mapKey:undefined}:null, cooldownUntil, seikanMode, blindSpot, emotionFocus, encouragement, returnPath, skyGazing, selfReturn, deepExploration, patternExploration, selectedMemory })); } catch {}
 }
 async function copyAnswerText(value) {
   try {
@@ -283,7 +285,7 @@ function renderMessages() {
   }
   for (const row of rows) {
     const block=document.createElement('div'); block.className=`message-row ${row.role}`;
-    const text=document.createElement('div'); text.className=row.role==='user'?'bubble':'assistant-text'; text.textContent=row.content.replace(/［参照した記憶：[0-9a-f-]{36}］/gi,'［選んだ記憶を参照］');
+    const text=document.createElement('div'); text.className=row.role==='user'?'bubble':'assistant-text'; text.textContent=row.content.replace(/［参照した記憶：[0-9a-f-]{36}］/gi,'［選んだ記憶を参照］').replace(/［参照した心の動きマップ：[0-9a-f]{64}］/gi,'［送信時の心の動きマップを参照］');
     if (row.role==='assistant') {
       const wrap=document.createElement('div'); wrap.className='assistant-message';
       const badge=document.createElement('div'); badge.className='assistant-badge'; badge.textContent='✦';
@@ -302,7 +304,7 @@ function renderHistory() {
   const nav=$('history'); nav.replaceChildren();
   for (const chat of chats) {
     const button=document.createElement('button'); button.className='history-item'+(chat.id===activeId?' active':''); button.textContent=chat.title;
-    button.onclick=() => run(async()=>{ if(activeId!==chat.id){clearRecall();leaveSelfReturn();encouragement=false;blindSpot=false;emotionFocus=false;returnPath=false;skyGazing=false;clearPdf();pending=null;input.value='';} activeId=chat.id; await loadMessages(); rememberDraft(); renderHistory(); toggleSidebar(false); });
+    button.onclick=() => run(async()=>{ if(activeId!==chat.id){document.dispatchEvent(new Event('dragon-chat-change'));clearRecall();leaveSelfReturn();encouragement=false;blindSpot=false;emotionFocus=false;returnPath=false;skyGazing=false;clearPdf();pending=null;input.value='';} activeId=chat.id; await loadMessages(); rememberDraft(); renderHistory(); toggleSidebar(false); });
     nav.append(button);
   }
   if (!chats.length) { const p=document.createElement('p'); p.className='history-empty'; p.textContent=session?'保存した会話がここに表示されます。':'お試しは右の入力欄から。ログイン後は保存した会話がここに表示されます。'; nav.append(p); }
@@ -430,6 +432,7 @@ function submitMessage(modeStart=false){
   run(async()=>{
     if(!session){await sendTrial(modeStart);return;}
     const sentDraft=input.value, text=modeStart?'':(sentDraft.trim() || '添付したPDFの内容を要約してください。'), version=epoch, replyVersion=++responseVersion;
+    const mindMap=modeStart?null:(globalThis.getDragonMindMapContext?.(text)||null),mapKey=JSON.stringify(mindMap);
     const attachment=modeStart?null:attachedPdf, memoryId=modeStart?null:(selectedMemory?.id||null);
     if(attachment && `${text}\n\n［添付PDF：${attachment.name}］`.length>4000)throw new Error('PDFのファイル名を含めて4,000文字以内になるよう、質問を短くしてください。');
     if(text.length>4000)throw new Error('メッセージは4,000文字以内で入力してください。');
@@ -440,12 +443,12 @@ function submitMessage(modeStart=false){
       if(version!==epoch||replyVersion!==responseVersion)return;
       activeId=id;rememberDraft();
     }
-    if(!pending||pending.text!==text||pending.conversationId!==activeId||pending.pdfId!==attachment?.id||pending.seikanMode!==seikanMode||pending.blindSpot!==blindSpot||pending.emotionFocus!==emotionFocus||pending.encouragement!==encouragement||pending.returnPath!==returnPath||pending.skyGazing!==skyGazing||pending.selfReturn!==selfReturn||pending.deepExploration!==deepExploration||pending.patternExploration!==patternExploration||pending.modeStart!==modeStart||pending.memoryId!==memoryId)pending={requestId:crypto.randomUUID(),conversationId:activeId,text,pdfId:attachment?.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,modeStart,memoryId};
+    if(!pending||pending.text!==text||pending.conversationId!==activeId||pending.pdfId!==attachment?.id||pending.seikanMode!==seikanMode||pending.blindSpot!==blindSpot||pending.emotionFocus!==emotionFocus||pending.encouragement!==encouragement||pending.returnPath!==returnPath||pending.skyGazing!==skyGazing||pending.selfReturn!==selfReturn||pending.deepExploration!==deepExploration||pending.patternExploration!==patternExploration||pending.modeStart!==modeStart||pending.memoryId!==memoryId||pending.mapKey!==mapKey)pending={requestId:crypto.randomUUID(),conversationId:activeId,text,pdfId:attachment?.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,modeStart,memoryId,mapKey};
     rememberDraft();status('返答を考えています…');replyWaiting(true);
     const {data:{session:fresh},error:authError}=await db.auth.getSession();
     if(version!==epoch||replyVersion!==responseVersion)return;
     if(authError||!fresh)throw new Error('ログインし直してください。');
-    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${fresh.access_token}`},body:JSON.stringify({message:text,conversationId:activeId,requestId:pending.requestId,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,modeStart,...(memoryId?{memoryId}:{}),...(attachment?{attachment:{name:attachment.name,mimeType:'application/pdf',data:attachment.data}}:{})}),signal:AbortSignal.timeout(85000)});
+    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${fresh.access_token}`},body:JSON.stringify({message:text,conversationId:activeId,requestId:pending.requestId,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,modeStart,mindMap,...(memoryId?{memoryId}:{}),...(attachment?{attachment:{name:attachment.name,mimeType:'application/pdf',data:attachment.data}}:{})}),signal:AbortSignal.timeout(85000)});
     const data=await response.json().catch(()=>({}));
     if(version!==epoch||replyVersion!==responseVersion)return;
     if(!response.ok) {
@@ -490,7 +493,7 @@ $('pdfInput').addEventListener('change',async()=>{
   finally{if(version===pdfVersion){pdfReading=false;$('pdfInput').value='';controls();}}
 });
 // Enter inserts a newline; sending is an explicit button action.
-$('newChat').onclick=()=>{if(busy)return;clearRecall();leaveSelfReturn();encouragement=false;blindSpot=false;emotionFocus=false;returnPath=false;skyGazing=false;clearPdf();activeId=null;rows=[];pending=null;input.value='';olderMore=false;rememberDraft();renderMessages();renderHistory();status('');toggleSidebar(false);input.focus();};
+$('newChat').onclick=()=>{if(busy)return;document.dispatchEvent(new Event('dragon-chat-change'));clearRecall();leaveSelfReturn();encouragement=false;blindSpot=false;emotionFocus=false;returnPath=false;skyGazing=false;clearPdf();activeId=null;rows=[];pending=null;input.value='';olderMore=false;rememberDraft();renderMessages();renderHistory();status('');toggleSidebar(false);input.focus();};
 let rememberedConversation=null;
 $('rememberChat').onclick=()=>run(async()=>{
   if(!activeId||!session||session.user.is_anonymous)return;
@@ -676,7 +679,7 @@ $('confirmDelete').onclick=()=>run(async()=>{
     const {error}=await db.rpc('delete_my_conversations',{p_conversation_id:target.all?null:target.id,p_delete_all:target.all});
     if(error)throw new Error('削除を確認できませんでした。時間をおいて、もう一度お試しください。');
     if(target.version!==epoch)return;
-    clearRecall();leaveSelfReturn();skyGazing=false;encouragement=false;returnPath=false;clearPdf();activeId=null;rows=[];chats=[];pending=null;input.value='';olderMore=false;historyMore=false;historyOffset=0;
+    document.dispatchEvent(new Event('dragon-chat-change'));clearRecall();leaveSelfReturn();skyGazing=false;encouragement=false;returnPath=false;clearPdf();activeId=null;rows=[];chats=[];pending=null;input.value='';olderMore=false;historyMore=false;historyOffset=0;
     try{sessionStorage.removeItem(storageKey());}catch{}
     renderMessages();renderHistory();deleteTarget=null;$('deleteDialog').close();toggleSidebar(false);
     status(target.all?'すべての会話を削除しました。':'会話を削除しました。');
