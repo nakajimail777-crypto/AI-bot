@@ -122,3 +122,15 @@ test('direction survives draft serialization and switching to pattern clears it'
  vm.runInContext(serializer+'\nrememberDraft();',s.context);assert.equal(saved.directionExploration,true);
  s.element('patternExploration').onclick();assert.equal(vm.runInContext('directionExploration',s.context),false);assert.equal(saved.directionExploration,false);assert.equal(saved.patternExploration,true);
 });
+
+for(const guest of [false,true])test('direction reselect reviews same conversation without toggling off: guest='+guest,async()=>{
+ const s=setup();if(guest)vm.runInContext('session=null;trialReady=true;trialRemaining=5;loadTrial=async()=>{};',s.context);
+ s.element('messageInput').value='未送信の言葉';
+ s.element('directionExploration').onclick();await new Promise(resolve=>setImmediate(resolve));const first=s.requested.body.requestId;
+ s.respond();await s.context.completed;
+ s.element('directionExploration').onclick();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(s.requested.body.directionExploration,true);assert.equal(s.requested.body.modeStart,true);assert.equal(s.requested.body.message,'');assert.notEqual(s.requested.body.requestId,first);
+ if(!guest)assert.equal(s.requested.body.conversationId,'chat');
+ s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'未送信の言葉');
+ s.element('endDeepExploration').onclick();assert.equal(vm.runInContext('directionExploration',s.context),false);
+});

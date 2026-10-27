@@ -359,3 +359,27 @@ test('leaving direction keeps history but removes active rules',async()=>{
 test('direction retry identity cannot reuse ordinary turn',async()=>{
  const s=setup({prior:[{role:'user',content:'こんにちは'}]});assert.equal((await s.invoke({body:{message:'こんにちは',conversationId:chat,requestId:request,directionExploration:true}})).code,409);
 });
+
+const nightDirectionHistory=[
+ {role:'user',content:'夜中に目が覚めて寝ようか起きていようか'},
+ {role:'assistant',content:'今は眠気がありますか？'},
+ {role:'user',content:'眠くない'},
+ {role:'assistant',content:'今どんな感じでしょう？'},
+ {role:'user',content:'ひまだなって感じ'}
+];
+for(const scenario of ['switch','continue','reselect','correction','stop'])test('direction v2 sends real ordered context for '+scenario,async()=>{
+ let history=[...nightDirectionHistory],message='',modeStart=true;
+ if(scenario==='continue'){history=history.slice(0,-1);message='ひまだなって感じ';modeStart=false;}
+ if(['reselect','correction','stop'].includes(scenario))history.push({role:'assistant',content:'自由な時間が欲しいのかもしれません。'});
+ if(scenario==='reselect')history.unshift({role:'user',content:'［方角を見るを選択］'});
+ if(scenario==='correction')history.push({role:'user',content:'違う。誰かと少し話したいだけ。'});
+ if(scenario==='stop')history.push({role:'user',content:'今日はここまで。もう終わりたい。'});
+ const s=setup({history:history.map((r,i)=>({...r,sequence:i+1})).reverse()});
+ assert.equal((await s.invoke({body:{message,conversationId:chat,requestId:request,directionExploration:true,modeStart}})).code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);
+ const body=JSON.parse(models[0].init.body),rules=body.systemInstruction.parts[0].text;
+ assert.deepEqual(body.contents.slice(0,-1).map(r=>r.parts[0].text),history.map(r=>r.content));
+ assert.match(rules,/Ver.2/);assert.match(rules,/根拠と推測を区別/);assert.match(rules,/否定を抵抗/);assert.match(rules,/新しい材料がなければ/);assert.match(rules,/終了意思を取り消す根拠にしない/);
+ assert.doesNotMatch(rules,/ひまだなって感じ|自由な時間が欲しい/); // User's example must be history, never a scripted answer.
+ assert.ok(!s.calls.some(c=>c.url.includes(':embedContent')));
+});

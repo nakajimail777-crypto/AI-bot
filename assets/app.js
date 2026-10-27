@@ -83,11 +83,11 @@ $('patternExploration').onclick=()=>{
 };
 $('directionExploration').onclick=()=>{
  if(busy||!ready||pdfReading||Date.now()<cooldownUntil)return;
- const enable=!directionExploration;leaveSelfReturn();directionExploration=enable;
+ leaveSelfReturn();directionExploration=true;
  seikanMode=false;emotionFocus=false;blindSpot=false;encouragement=false;returnPath=false;skyGazing=false;
  pending=null;trialPending=null;rememberDraft();controls();
  explorationMenu.open=false;
- if(enable)submitMessage(true);else status('通常対話に戻りました。');
+ submitMessage(true);
  input.focus();
 };
 $('endDeepExploration').onclick=()=>{
