@@ -387,7 +387,9 @@
   <link rel="stylesheet" href="/assets/db.css">
   <link rel="stylesheet" href="/assets/mind-reflection.css">
   <link rel="stylesheet" href="/assets/reaction-lab.css">
-</head>
+<style>#talkPanel#talkPanel{position:static;margin:10px auto 0;padding:12px;max-height:35dvh;box-shadow:none;border-radius:16px;background:#2f2f2f}#talkPanel .talk-heading{display:flex;margin-bottom:12px}#talkPanel .talk-grid{display:grid;grid-template-columns:1fr;gap:10px}.talk-grid>.plain-button{font-size:12px;padding:9px 12px;border:1px solid #505050;border-radius:12px;background:#303030}.talk-grid>.plain-button[aria-pressed="true"]{background:#354b40;border-color:#9ac3ab}</style><style>
+.composer-actions{justify-content:flex-start;gap:10px;flex-wrap:wrap}.composer-actions .send-button{margin-left:auto;flex-shrink:0}#talkToggle{font-size:13px;font-weight:600;padding:9px 14px;border:1px solid #888;border-radius:9px;background:linear-gradient(#565656,#414141);color:#fff;box-shadow:0 2px 3px #0005;cursor:pointer}#talkActive{font-size:12px;color:#c5d6cf;overflow-wrap:anywhere;max-width:100%}.talk-help{max-width:760px;margin:7px auto 0;color:#aaa;font-size:12px;padding-left:12px}#talkPanel[hidden]{display:none}#talkPanel{position:absolute;bottom:calc(100% - 4px);left:18px;right:18px;max-width:760px;margin:auto;max-height:min(440px,55dvh);overflow:auto;background:#292b2a;border:1px solid #595d5a;border-radius:18px;padding:18px;box-shadow:0 12px 40px #0008}.talk-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.talk-intro{font-size:12px;color:#bdbfbd;line-height:1.7;margin:8px 0 14px}.talk-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.talk-option{padding:12px;border:1px solid #494d4a;border-radius:12px;background:#323532}.talk-option .plain-button{font-size:13px;max-width:100%;white-space:normal;text-align:left}.talk-option p{font-size:12px;line-height:1.7;color:#d0d2d0;margin:8px 0}.talk-option small{font-size:11px;color:#abb7ad}.talk-option:has([aria-pressed="true"]){border-color:#a3c9b4;background:#35463d}#talkPanel button:focus-visible,#talkToggle:focus-visible{outline:2px solid #c5e8d5;outline-offset:3px}@media(max-width:540px){#talkPanel{left:10px;right:10px;padding:14px;max-height:52dvh}.talk-grid{grid-template-columns:1fr}.composer-actions{gap:6px}#talkActive:not(:empty){order:4;flex-basis:100%;padding:3px 8px}.talk-help{font-size:11px}}
+</style></head>
 <body>
   <div class="app">
     <aside class="sidebar" id="sidebar" aria-label="チャット履歴">
@@ -499,11 +501,16 @@
             <button id="selfReturn" class="plain-button self-return" type="button" aria-pressed="false" aria-describedby="selfReturnHint">🧭 自分に戻る</button>
             <button id="skyGazing" class="plain-button sky-gazing" type="button" aria-pressed="false" aria-describedby="skyGazingHint">🌙 空を眺める</button>
             <button id="blindSpot" class="plain-button blind-spot" type="button" aria-pressed="false" aria-describedby="blindSpotHint">🔦 盲点を照らす</button>
-            <button class="send-button" id="sendButton" type="submit" disabled aria-label="送信">
+            <button type="button" class="plain-button" id="talkToggle" aria-expanded="false" aria-controls="talkPanel">話し方を選ぶ <span aria-hidden="true">⌄</span></button><button class="send-button" id="sendButton" type="submit" disabled aria-label="送信">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 12 6-6 6 6M12 6v12"/></svg>
             </button>
           </div>
-        </form>
+        </form><section id="talkPanel" aria-label="話し方を選ぶ" hidden><div class="talk-heading"><strong>話し方を選ぶ</strong><button type="button" class="plain-button" id="talkClose" aria-label="話し方を閉じる">閉じる ×</button></div><div class="talk-grid"><div class="talk-option"><strong>静観モード</strong><p>答えを急がず、今の気持ちや感覚を一緒に見たいとき。</p><small>OFFにするまで有効</small></div>
+<div class="talk-option"><strong>感情を感じきる</strong><p>解決を急がず、言葉にならない気持ちも受け止めてほしいとき。</p><small>OFFにするまで有効</small></div>
+<div class="talk-option"><strong>戻れる逃げ道</strong><p>いったん話を離れ、また戻れる余地を残したいとき。</p><small>次の返答だけ</small></div>
+<div class="talk-option"><strong>自分に戻る</strong><p>周りの意見から少し離れ、自分の感覚とペースを大切にしたいとき。</p><small>OFFにするまで有効</small></div>
+<div class="talk-option"><strong>空を眺める</strong><p>分析や提案を休んで、短い言葉でのんびり話したいとき。</p><small>OFFにするまで有効</small></div>
+<div class="talk-option"><strong>盲点を照らす</strong><p>今の話を、違う角度から一つ見てみたいとき。</p><small>次の返答だけ</small></div></div></section>
         <p id="emotionFocusHint" class="seikan-hint emotion-focus-hint" hidden>解決を急がず、擬音や言葉にならない感覚もそのまま受け止めます。もう一度押すとOFFになります。</p>
         <p id="encouragementHint" class="seikan-hint" hidden>次に送る1返答だけ、小さな一歩を具体的に提案します。他のモードはこの1回だけ休みます。もう一度押すと取り消せます。</p>
         <p id="returnPathHint" class="seikan-hint" hidden>いったん離れても、また戻れる場所を残します。次の1返答だけ有効です。</p>
@@ -607,5 +614,5 @@
   <script defer src="/assets/app.js"></script>
   <script type="module" src="/assets/mind-reflection.js"></script>
   <script type="module" src="/assets/reaction-lab.js"></script>
-</body>
+<script>(()=>{const ids=[["seikanMode","静観モード"],["emotionFocus","感情を感じきる"],["returnPath","戻れる逃げ道"],["selfReturn","自分に戻る"],["skyGazing","空を眺める"],["blindSpot","盲点を照らす"]];const toggle=document.getElementById('talkToggle'),panel=document.getElementById('talkPanel');function close(){panel.hidden=true;toggle.setAttribute('aria-expanded','false')}toggle.addEventListener('click',()=>{panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden))});document.getElementById('talkClose').addEventListener('click',()=>{close();toggle.focus()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden){close();toggle.focus()}});document.addEventListener('click',e=>{if(!panel.hidden&&!panel.contains(e.target)&&!toggle.contains(e.target))close()});function sync(){const active=ids.filter(([id])=>document.getElementById(id).getAttribute('aria-pressed')==='true').map(([,name])=>name);toggle.title=active.length?'選択中：'+active.join('・'):'話し方を選ぶ';}const observer=new MutationObserver(sync);ids.forEach(([id])=>observer.observe(document.getElementById(id),{attributes:true,attributeFilter:['aria-pressed']}));sync()})();</script></body>
 </html>
