@@ -8,6 +8,16 @@ let db, session = null, activeId = null, busy = false, ready = false, epoch = 0,
 // Reflection uses the same authenticated client; it never enters chat requests automatically.
 globalThis.getDragonReflectionContext=()=>({db,userId:session?.user?.is_anonymous?null:session?.user?.id||null});
 let historyOffset = 0, historyMore = false, olderMore = false;
+const ayumi = globalThis.DragonAyumi?.mount({
+  context:()=>({db,session}),
+  prepareChat(text){
+    if(text.length>4000)throw new Error('相談文が長いため、項目を短くしてからお試しください（4,000文字まで）。');
+    if(busy||!ready||input.disabled)throw new Error('チャットを使える状態になってから、もう一度お試しください。');
+    if(input.value.trim()||attachedPdf)throw new Error('チャット入力欄に下書きがあります。先に送信するか控えてからお試しください。');
+    input.value=text;input.dispatchEvent(new Event('input',{bubbles:true}));toggleSidebar(false);input.focus();
+    return true;
+  }
+});
 let incomingNumbers = globalThis.DragonNumberEntry?.read(location.search);
 let trialRemaining=5, trialReady=false, trialPending=null, trialLoading=null;
 async function loadTrial(){
@@ -355,6 +365,7 @@ async function changeSession(next) {
   if(oldId!==nextId){leaveSelfReturn();seikanMode=false;encouragement=false;blindSpot=false;emotionFocus=false;returnPath=false;skyGazing=false;}
   if(oldId===nextId){if(!next){ready=true;try{await loadTrial();}catch(error){status(error.message,true);}}controls();return;}
   resetMemories();
+  ayumi?.reset();
   epoch++;const version=epoch;clearPdf();ready=false;activeId=null;rows=[];chats=[];pending=null;input.value='';historyMore=false;olderMore=false;
   usageVersion++; usageCache.clear(); cooldownUntil=0; $('usageDialog').close(); $('usageScope').value='self'; $('usageScopeLabel').hidden=true; $('usageMonthly').textContent='';
   clearPdfDownload();deleteTarget=null;archivedChats=[];$('deleteDialog').close();$('manageDialog').close();$('archivedDialog').close();$('pdfDialog').close();$('pdfPreview').src='about:blank';

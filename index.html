@@ -402,6 +402,7 @@
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m15 18-6-6 6-6"/></svg>
         </button>
       </div>
+      <button id="openAyumi" class="plain-button" type="button">歩みを見る</button>
       <nav class="history" id="history" aria-label="過去の会話"></nav>
       <button class="profile" id="profile" type="button">
         <span class="avatar">U</span>
@@ -612,6 +613,49 @@
     </div>
   </dialog>
   <script defer src="/assets/memories.js"></script>
+  <link rel="stylesheet" href="/assets/ayumi.css">
+  <dialog id="ayumiDialog" class="auth-dialog" aria-labelledby="ayumiTitle">
+    <div class="ayumi-scroll">
+    <h2 id="ayumiTitle">歩みを見る <small>Ver.1</small></h2>
+    <p>小さな一歩も、立ち止まって気づいたことも。あなたのペースで残していきましょう。</p>
+    <p id="ayumiGuest">ログイン前はお試し編集です。保存はできず、再読み込みやログインで入力は消えます。</p>
+    <div class="ayumi-actions"><button id="ayumiNew" class="plain-button" type="button">新しい目標</button><button id="ayumiReload" class="plain-button" type="button">保存した歩みを再読み込み</button></div>
+    <nav id="ayumiList" aria-label="保存した目標"></nav>
+    <details id="ayumiPlanner">
+      <summary>目標からチェックリスト案を作る</summary>
+      <p>目標を入力 → 案を確認・編集 →「この内容で作成」→「保存」の順で作れます。</p>
+      <label for="ayumiPlanGoal">やりたいこと</label>
+      <textarea id="ayumiPlanGoal" maxlength="2000" rows="3" placeholder="例：11月9日にInstagramを公開したい"></textarea>
+      <p>「AIで案を作る」を押すと、この目標をGoogle Geminiへ送ります。ログインが必要です。提案はまだ保存されません。</p>
+      <button id="ayumiPlanGenerate" class="plain-button" type="button">AIで案を作る</button>
+      <section id="ayumiPlanReview" hidden aria-label="チェックリスト案の確認">
+        <label for="ayumiPlanTitle">目標名の案</label><input id="ayumiPlanTitle" maxlength="120">
+        <div id="ayumiPlanItems"></div>
+        <div class="ayumi-actions"><button id="ayumiPlanApply" class="plain-button" type="button">この内容で作成</button><button id="ayumiPlanCancel" class="plain-button" type="button">案を取り消す</button></div>
+        <p>新しい目標として作成します。すべて未完了で始まり、「保存」まで記録しません。</p>
+      </section>
+      <p id="ayumiPlanStatus" role="status"></p>
+    </details>
+    <fieldset id="ayumiFields">
+      <legend class="sr-only">目標とチェックリスト</legend>
+      <label for="ayumiName">目標・プロジェクト名</label><input id="ayumiName" type="text" maxlength="120" placeholder="例：Instagramの公開準備">
+      <label for="ayumiDue">期限（任意）</label><input id="ayumiDue" type="date">
+      <p id="ayumiCount" aria-live="polite"></p><progress id="ayumiProgress" max="100" value="0" aria-label="完了した項目の割合"></progress>
+      <div id="ayumiItems" aria-label="チェックリスト"></div>
+      <div class="ayumi-actions"><button id="ayumiAdd" type="button" class="plain-button">＋ 一歩を追加</button><button id="ayumiUndo" type="button" class="plain-button" disabled>削除を元に戻す</button></div>
+      <details id="ayumiTrash"><summary id="ayumiTrashCount">削除した項目（0件）</summary><p>削除した項目も「保存」で保管します。あとから選んで復元できます。</p><div id="ayumiTrashList"></div></details>
+      <label for="ayumiInsight">今日の気づき（任意）</label><textarea id="ayumiInsight" maxlength="500" placeholder="やってみて気づいたことを一言"></textarea>
+      <p id="ayumiHint">変更は「保存」を押すまで記録されません。気づきを書き換えて保存すると、日付付きで履歴に追加します。前の気づきも残ります。</p>
+      <details id="ayumiInsights"><summary id="ayumiInsightCount">気づきの履歴（0件）</summary><div id="ayumiInsightList"></div></details>
+      <div class="ayumi-actions"><button id="ayumiSplit" type="button" class="plain-button">AIに一歩の分け方を相談</button><button id="ayumiReflect" type="button" class="plain-button">AIと振り返る</button></div>
+      <p>AIへの相談文をチャット入力欄に用意します。振り返りには最近5件の気づきも含めます。内容を確認して送信できます。提案を取り入れるか、完了にするかはあなたが決めます。</p>
+    </fieldset>
+    <p id="ayumiStatus" role="status"></p>
+    </div>
+    <div class="ayumi-savebar"><span id="ayumiDirty" role="status">まだ保存していません</span><button id="ayumiSave" type="button" class="plain-button">保存</button><button id="closeAyumi" type="button" class="plain-button">閉じる</button></div>
+  </dialog>
+  <script defer src="/assets/ayumi.js"></script>
+  <script defer src="/assets/ayumi-planner.js"></script>
   <script defer src="/assets/app.js"></script>
   <script type="module" src="/assets/mind-reflection.js"></script>
   <script type="module" src="/assets/reaction-lab.js"></script>

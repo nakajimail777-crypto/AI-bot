@@ -1,5 +1,8 @@
 {
   "functions": {
+    "api/ayumi-plan.js": {
+      "maxDuration": 90
+    },
     "api/line-webhook.js": {
       "maxDuration": 90
     },

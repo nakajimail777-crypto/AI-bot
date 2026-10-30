@@ -1,0 +1,43 @@
+#ayumiDialog { width:min(720px,calc(100vw - 24px)); max-width:720px; max-height:calc(100dvh - 32px); padding:0; overflow:hidden; }
+#ayumiDialog[open] { display:flex; flex-direction:column; }
+.ayumi-scroll { padding:24px; overflow-y:auto; min-height:0; overscroll-behavior:contain; }
+.ayumi-savebar { display:flex; flex-shrink:0; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 20px max(12px,env(safe-area-inset-bottom)); border-top:1px solid #64766e; background:#242424; }
+.ayumi-savebar button { min-height:44px; }
+#ayumiDirty { flex:1; font-size:14px; min-width:80px; }
+#ayumiDirty[data-dirty=true] { color:#ffdb94; font-weight:700; }
+#ayumiTrash, #ayumiInsights { margin:16px 0; border-top:1px solid var(--line); padding-top:12px; }
+#ayumiDialog summary { min-height:44px; padding:10px 0; cursor:pointer; }
+.ayumi-record { padding:12px 0; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+.ayumi-record p { white-space:pre-wrap; margin:8px 0; }
+.ayumi-record button { margin-right:8px; }
+#ayumiPlanner { border:1px solid #64766e; border-radius:12px; padding:12px; margin:16px 0; }
+#ayumiPlanner label { display:block; margin:12px 0 6px; }
+#ayumiPlanner textarea, #ayumiPlanTitle { width:100%; min-width:0; padding:10px; background:#171d1b; color:#ececec; border:1px solid #64766e; border-radius:8px; font:inherit; font-size:16px; }
+#ayumiPlanner button { min-height:44px; }
+.ayumi-plan-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; margin:10px 0; }
+#ayumiPlanStatus { overflow-wrap:anywhere; }
+#ayumiDialog h2 { margin-top:0; }
+#ayumiDialog p { line-height:1.6; }
+#ayumiFields { border:0; padding:0; margin:0; min-width:0; }
+#ayumiFields label { display:block; margin-top:16px; }
+#ayumiFields input:not([type=checkbox]), #ayumiInsight { width:100%; min-width:0; background:#171d1b; color:#ececec; border:1px solid #64766e; border-radius:8px; padding:12px; font:inherit; font-size:16px; }
+#ayumiFields button, #ayumiList button, #closeAyumi { min-height:44px; }
+#ayumiFields :focus-visible { outline:2px solid #a9dec7; outline-offset:2px; }
+#ayumiInsight { resize:vertical; min-height:88px; }
+#ayumiProgress { width:100%; height:16px; accent-color:#99d6bb; }
+.ayumi-item { display:grid; grid-template-columns:44px minmax(0,1fr) auto; gap:8px; align-items:center; margin:10px 0; }
+.ayumi-item-actions { display:flex; gap:4px; }
+@media(max-width:600px) {
+  .ayumi-item { grid-template-columns:44px minmax(0,1fr); padding-bottom:8px; border-bottom:1px solid var(--line); }
+  .ayumi-item-actions { grid-column:2; justify-content:flex-end; }
+}
+.ayumi-item input[type=checkbox] { width:28px; height:28px; margin:8px; accent-color:#99d6bb; }
+.ayumi-item:has(input:checked) input[type=text] { color:#b5d7c8; }
+.ayumi-actions { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+#ayumiList { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+#ayumiList button { text-align:left; overflow-wrap:anywhere; max-width:100%; white-space:normal; }
+#ayumiSave { background:#b1dfc9; color:#13241b; }
+#ayumiGuest, #ayumiHint { color:#b9cfc4; font-size:14px; }
+#ayumiStatus { min-height:24px; overflow-wrap:anywhere; }
+#openAyumi { flex-shrink:0; margin:0 12px 8px; min-height:44px; text-align:left; }
+@media(max-width:480px) { .ayumi-scroll { padding:16px; } .ayumi-savebar { padding-left:12px; padding-right:12px; } .ayumi-item { gap:4px; } .ayumi-item button { padding:6px; } }
