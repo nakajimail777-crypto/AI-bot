@@ -114,3 +114,32 @@
 #ayumiFields>legend,.ayumi-overview-hint,#ayumiRecordBreakdown {display:none;}
 .ayumi-overview h3 {font-size:15px;margin-top:0;}
 #simpleOther {margin-top:20px;}
+
+#ayumiFields .project-check-row {display:flex;gap:12px;align-items:center;min-height:44px;margin:0;padding:8px 0;border-bottom:1px solid #39483f;}
+#ayumiFields .project-check-row input {width:22px;height:22px;flex:0 0 22px;accent-color:#b1dfc9;}
+.project-check-row span {overflow-wrap:anywhere;}
+#projectOverviewTitle {font-size:21px;margin:0 0 14px;}
+#projectOverviewDue {font-size:13px;color:#b3beb7;}
+#ayumiCount {font-size:22px;font-weight:700;}
+.ayumi-today-panel {border:1px solid #64766e;border-radius:12px;padding:14px;margin-top:20px;}
+
+#ayumiFields .project-check-row {display:flex;align-items:flex-start;gap:10px;padding:10px 0;}
+#ayumiFields .project-check-label {display:flex;flex:1;gap:12px;align-items:center;min-width:0;min-height:44px;margin:0;}
+.project-item-due {flex:0 0 190px;font-size:13px;color:#c5d9ce;}
+.project-item-due summary {min-height:44px;display:flex;align-items:center;cursor:pointer;text-decoration:underline;text-underline-offset:4px;}
+.project-item-due summary::before {content:'▸';margin-right:6px;}
+.project-item-due[open] summary::before {content:'▾';}
+#ayumiFields .project-item-due input {font-size:16px;min-height:44px;width:100%;box-sizing:border-box;}
+#ayumiFields .project-item-due label {margin:4px 0 8px;}
+@media(max-width:520px){#ayumiFields .project-check-row {flex-wrap:wrap;gap:0;}#ayumiFields .project-check-label {flex-basis:100%;}.project-item-due {margin-left:34px;flex:1;}.project-item-due summary {min-height:36px;}}
+
+.achievement-card {border:1px solid #d8c483;background:linear-gradient(135deg,#233c30,#343226);border-radius:16px;padding:20px;margin:16px 0;color:#f2e4b2;}
+.achievement-card[hidden]{display:none;}
+.achievement-card h3{font-size:22px;margin:0 0 12px;}
+.achievement-card p{overflow-wrap:anywhere;}
+@keyframes stepSpark {0%{box-shadow:0 0 0 0 #b1dfc980;}100%{box-shadow:0 0 24px 12px transparent;}}
+@keyframes celebrateGoal {0%{transform:scale(.95);opacity:.4;}100%{transform:scale(1);opacity:1;}}
+.step-spark {animation:stepSpark .7s ease-out;}.celebrate {animation:celebrateGoal .6s ease-out;}
+@media(prefers-reduced-motion:reduce){.step-spark,.celebrate{animation:none;}}
+
+#jumpToday {margin:4px 0 12px;min-height:44px;}

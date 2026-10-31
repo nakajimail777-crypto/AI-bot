@@ -1,0 +1,66 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {PGlite} from '@electric-sql/pglite';
+import '../assets/ayumi.js';
+const a=DragonAyumi;
+const item={id:'step',text:'作業',done:false,due_date:'2026-11-02'};
+const project={id:'33333333-3333-4333-8333-333333333333',title:'V2',items:[item],insight:''};
+test('item deadlines survive normalization, removal, trash and restore; invalid dates are rejected',()=>{
+ assert.equal(a.normalize(project).items[0].due_date,'2026-11-02');
+ const trash=a.normalize({...project,items:[],deleted_items:[{item,index:0,deleted_on:'2026-11-01'}]});
+ assert.equal(a.normalize({...project,items:[trash.deleted_items[0].item]}).items[0].due_date,item.due_date);
+ assert.equal(a.normalize({...project,items:[{...item,due_date:null}]}).items[0].due_date,undefined);
+ assert.throws(()=>a.normalize({...project,items:[{...item,due_date:'2026-02-30'}]}));
+});
+test('only confirmed completed goals have cards; daily-only, pending and reverted goals do not',()=>{
+ const completed={...project,items:[{...item,done:true}]};
+ const pending=a.prepareAchievement(completed,project);
+ assert.ok(pending.achieved_on);
+ assert.equal(a.confirmedAchievement(pending,project),null);
+ assert.equal(a.confirmedAchievement(pending,null),null);
+ assert.equal(a.confirmedAchievement(pending,pending),pending);
+ assert.equal(a.confirmedAchievement(project,pending),null);
+ assert.equal(a.prepareAchievement(project,pending).achieved_on,null);
+ assert.equal(a.prepareAchievement(completed,{...pending,achieved_on:'2026-10-31'}).achieved_on,'2026-10-31');
+ const daily={id:'daily',text:'毎日',done:false,daily:a.dailyRange('2026-11-01','2026-11-02')};
+ daily.daily.checks.forEach(c=>{c.done=true;});
+ assert.deepEqual(a.overallProgress([daily]),{done:0,total:0,percent:0});
+ assert.equal(a.prepareAchievement({...project,items:[daily]},null).achieved_on,null);
+ assert.equal(a.overallComplete([daily,item]),false);
+ assert.equal(a.overallComplete([daily,{...item,done:true}]),true);
+});
+test('production migration saves deadlines and achievement, guards old clients and preserves RLS',async()=>{
+ const db=new PGlite();const owner='11111111-1111-4111-8111-111111111111';
+ try {
+  await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);
+   create function auth.uid() returns uuid language sql as $$select nullif(current_setting('test.uid',true),'')::uuid$$;
+   create function auth.jwt() returns jsonb language sql as $$select '{}'::jsonb$$;grant usage on schema auth to authenticated;`);
+  for(const name of ['20261030_ayumi.sql','20261030_ayumi_history.sql','20261031_ayumi_weeks.sql','20261031_ayumi_project_archive.sql','20261101_ayumi_daily.sql','20261101_ayumi_v2.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'));
+  await db.query('insert into auth.users values($1)',[owner]);
+  await db.exec(`set role authenticated;set test.uid='${owner}';`);
+  const row=(await db.query(`insert into ayumi_projects(id,title,items,v2_revision) values($1,'V2',$2,1) returning *`,[project.id,JSON.stringify([item])])).rows[0];
+  assert.equal(row.items[0].due_date,item.due_date);assert.equal(row.achieved_on,null);
+  await assert.rejects(db.query(`update ayumi_projects set items=$1,version=version+1 where id=$2`,[JSON.stringify([{id:item.id,text:item.text,done:false}]),row.id]),/Reload required/);
+  await assert.rejects(db.query(`update ayumi_projects set achieved_on='2026-11-01',v2_revision=2,version=2 where id=$1`,[row.id]),/check constraint/);
+  const done={...item,done:true};
+  await db.query(`update ayumi_projects set items=$1,achieved_on='2026-11-01',v2_revision=2,version=2 where id=$2`,[JSON.stringify([done]),row.id]);
+  let saved=(await db.query('select * from ayumi_projects')).rows[0];assert.equal(new Date(saved.achieved_on).toISOString().slice(0,10),'2026-11-01');
+  const trash=[{item:done,index:0,deleted_on:'2026-11-01'}];
+  await db.query(`update ayumi_projects set items='[]',deleted_items=$1,achieved_on=null,v2_revision=3,version=3 where id=$2`,[JSON.stringify(trash),row.id]);
+  saved=(await db.query('select * from ayumi_projects')).rows[0];assert.deepEqual(saved.deleted_items,trash);
+  await db.query(`update ayumi_projects set items=$1,deleted_items='[]',achieved_on='2026-11-01',archived=true,v2_revision=4,version=4 where id=$2`,[JSON.stringify([done]),row.id]);
+  saved=(await db.query('select * from ayumi_projects')).rows[0];assert.equal(saved.archived,true);assert.equal(saved.items[0].due_date,item.due_date);
+  await db.exec(`set test.uid='22222222-2222-4222-8222-222222222222';`);
+  assert.equal((await db.query('select * from ayumi_projects')).rows.length,0);
+  assert.equal((await db.query(`update ayumi_projects set title='other',version=version+1,v2_revision=v2_revision+1 returning id`)).rows.length,0);
+  await db.exec('reset role');
+  for(const due of ['2026-02-30',null,123]) assert.equal((await db.query('select ayumi_items_valid($1) ok',[JSON.stringify([{...item,due_date:due}])])).rows[0].ok,false);
+  const daily={id:'daily',text:'毎日',done:false,daily:a.dailyRange('2026-11-01','2026-11-02')};
+  daily.daily.checks.forEach(c=>{c.done=true;});
+  await assert.rejects(db.query(`insert into ayumi_projects(user_id,title,items,daily_revision,v2_revision,achieved_on) values($1,'daily',$2,1,1,'2026-11-01')`,[owner,JSON.stringify([daily])]),/check constraint/);
+  const dailyRow=(await db.query(`insert into ayumi_projects(user_id,title,items,daily_revision,v2_revision) values($1,'daily',$2,1,1) returning *`,[owner,JSON.stringify([daily])])).rows[0];
+  assert.equal(dailyRow.items[0].daily.checks.length,2);
+  await assert.rejects(db.query(`update ayumi_projects set version=version+1,daily_revision=daily_revision+1 where id=$1`,[dailyRow.id]),/Reload required/);
+ }finally{await db.close();}
+});
