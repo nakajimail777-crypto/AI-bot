@@ -92,3 +92,14 @@
 
 .ayumi-overview .ayumi-actions {margin-bottom:0;}
 #ayumiArchiveHint {flex-basis:100%;order:2;}
+
+.compact-date-nav {display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:center;margin:12px 0 8px;}
+#ayumiFields #compactDate {padding:8px;min-height:44px;}
+#ayumiFields .compact-action {display:grid;grid-template-columns:minmax(0,1fr) 132px;gap:10px;align-items:center;padding:8px 0;margin:0;border-bottom:1px solid #43564b;}
+.compact-action span {overflow-wrap:anywhere;}
+.compact-action select {width:100%;min-height:44px;font:inherit;font-size:16px;color:#ececec;background:#171d1b;border:1px solid #64766e;border-radius:8px;padding:6px;}
+.compact-action select[data-state=done] {color:#b1dfc9;border-color:#b1dfc9;}
+.compact-action select[data-state=missed] {color:#e2ca9b;}
+.ayumi-overview {margin-bottom:12px;padding:12px;}
+#ayumiDayCount {font-size:.9rem;}
+@media(max-width:420px){.compact-date-nav {grid-template-columns:1fr 1fr;}#ayumiFields #compactDate {grid-row:1;grid-column:1/-1;}#compactPrev {grid-row:2;}#compactNext {grid-row:2;}}
