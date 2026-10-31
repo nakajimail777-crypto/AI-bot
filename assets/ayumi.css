@@ -103,3 +103,14 @@
 .ayumi-overview {margin-bottom:12px;padding:12px;}
 #ayumiDayCount {font-size:.9rem;}
 @media(max-width:420px){.compact-date-nav {grid-template-columns:1fr 1fr;}#ayumiFields #compactDate {grid-row:1;grid-column:1/-1;}#compactPrev {grid-row:2;}#compactNext {grid-row:2;}}
+
+.simple-check-row {display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #43564b;}
+#ayumiFields .simple-check-label {display:flex;align-items:center;gap:12px;flex:1;margin:0;min-width:0;min-height:44px;}
+#ayumiFields .simple-check-label input {width:24px;height:24px;flex:0 0 24px;accent-color:#b1dfc9;}
+.simple-check-label span {overflow-wrap:anywhere;}
+.simple-done {text-decoration:line-through;color:#b1dfc9;}
+.simple-rest {font-size:12px;min-height:44px;padding:4px 8px;white-space:nowrap;}
+.simple-resting .simple-check-label span {color:#e2ca9b;}
+#ayumiFields>legend,.ayumi-overview-hint,#ayumiRecordBreakdown {display:none;}
+.ayumi-overview h3 {font-size:15px;margin-top:0;}
+#simpleOther {margin-top:20px;}
