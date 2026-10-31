@@ -4,7 +4,7 @@ window.DragonPdf = (() => {
   const ascii = value => encoder.encode(value);
 
   function utf16be(value) {
-    const bytes = [0xfe, 0xff];
+    const bytes = [];
     for (const char of value) {
       const code = char.codePointAt(0);
       if (code > 0xffff) { bytes.push(0xff, 0xfd); continue; }
@@ -22,7 +22,7 @@ window.DragonPdf = (() => {
     return result;
   }
 
-  function contentPages(conversations) {
+  function contentPages(conversations, options = {}) {
     const pages = [[]];
     let y = 806;
     const add = (text, size = 10, gap = 15) => {
@@ -30,12 +30,12 @@ window.DragonPdf = (() => {
       pages.at(-1).push(`BT /F1 ${size} Tf 50 ${y} Td <${utf16be(text)}> Tj ET`);
       y -= gap;
     };
-    add('スピリットドラゴンAI 会話', 18, 28);
+    add(options.heading || 'スピリットドラゴンAI 会話', 18, 28);
     add(`出力日時：${new Date().toLocaleString('ja-JP')}`, 9, 22);
     for (const conversation of conversations) {
-      add(conversation.title || '無題の会話', 14, 24);
+      for(const line of lines(conversation.title || '無題の会話',30)) add(line,14,24);
       for (const entry of conversation.entries || []) {
-        add(entry.role === 'user' ? 'あなた' : 'スピリットドラゴンAI', 10, 16);
+        if(!options.hideRoles) add(entry.role === 'user' ? 'あなた' : 'スピリットドラゴンAI', 10, 16);
         for (const line of lines(entry.content)) add(line || ' ', 10, 15);
         y -= 5;
       }
@@ -44,8 +44,8 @@ window.DragonPdf = (() => {
     return pages;
   }
 
-  function create(conversations) {
-    const pages = contentPages(conversations);
+  function create(conversations, options = {}) {
+    const pages = contentPages(conversations, options);
     const objects = [];
     const add = body => { objects.push(body); return objects.length; };
     const catalog = add('');
