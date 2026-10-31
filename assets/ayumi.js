@@ -125,7 +125,7 @@ globalThis.DragonAyumi = {
   },
   mount({context, prepareChat}) {
     const el = id => document.getElementById(id), dialog = el('ayumiDialog');
-    const expanded=new Set(),dailyPages=new Map();
+    const dailyPages=new Map();
     const fields=el('ayumiFields');
     const todaySection=document.createElement('section');todaySection.className='ayumi-today-panel';
     todaySection.innerHTML='<h3 id="ayumiDayHeading">今日の一歩</h3><div id="ayumiDayActions"></div><p id="ayumiDayCount" aria-live="polite"></p>';
@@ -212,9 +212,8 @@ globalThis.DragonAyumi = {
     function renderItems() {
       el('ayumiItems').replaceChildren();
       draft.items.forEach((item,index)=>{
-        const card=document.createElement('details');card.className='ayumi-card';card.open=expanded.has(item.id);
-        card.ontoggle=()=>{if(!card.isConnected)return;if(card.open)expanded.add(item.id);else expanded.delete(item.id);};
-        const summary=document.createElement('summary');
+        const card=document.createElement('section');card.className='ayumi-card';
+        const summary=document.createElement('h4');summary.className='ayumi-item-heading';
         const updateSummary=()=>{const p=DragonAyumi.progress([item]);summary.textContent=(item.text||'新しい一歩')+' · '+p.done+'/'+p.total;card.classList.toggle('ayumi-complete',p.total>0&&p.done===p.total);};
         updateSummary();card.append(summary);
         const row=document.createElement('div'); row.className='ayumi-item';
@@ -263,7 +262,7 @@ globalThis.DragonAyumi = {
           const weeks=[...(item.weeks||[]),{start:start.value,done:false}];
           try{DragonAyumi.weekFields({weeks});}catch(error){message(error.message);return;}
           if(!item.weeks?.length&&item.done&&!confirm('週ごとの記録に切り替えると、この項目の進捗は新しい週のチェックで計算します。切り替えますか？'))return;
-          item.weeks=weeks;expanded.add(item.id);changed();renderItems();
+          item.weeks=weeks;changed();renderItems();
         };
         weekly.append(start,add);card.append(weekly);el('ayumiItems').append(card);
       });
@@ -286,7 +285,7 @@ globalThis.DragonAyumi = {
         const daily=DragonAyumi.dailyRange(start.value,end.value,item.daily);
         const total=[...draft.items,...draft.deleted_items.map(e=>e.item)].reduce((n,i)=>n+(i.id===item.id?daily.checks.length:i.daily?.checks.length||0),0);
         if(total>5000)throw new Error('日別の記録は全体で5,000件までです。');
-        item.daily=daily;dailyPages.delete(item.id);expanded.add(item.id);changed();renderItems();
+        item.daily=daily;dailyPages.delete(item.id);changed();renderItems();
       }catch(error){message(error.message);}};
       if(!item.daily)return;
       const days=DragonAyumi.units([item]),today=DragonAyumi.dailyToday();
@@ -383,7 +382,7 @@ globalThis.DragonAyumi = {
     ['ayumiName','ayumiDue','ayumiInsight'].forEach(id=>{el(id).oninput=changed;});
     el('ayumiAdd').onclick=()=>{
       if(draft.items.length>=100){message('項目は100件までです。');return;}
-      const item={id:crypto.randomUUID(),text:'',done:false};expanded.add(item.id);draft.items.push(item);changed();renderItems();el('ayumiItems').lastElementChild.querySelector('input[type=text]').focus();
+      const item={id:crypto.randomUUID(),text:'',done:false};draft.items.push(item);changed();renderItems();el('ayumiItems').lastElementChild.querySelector('input[type=text]').focus();
     };
     el('ayumiUndo').onclick=()=>{
       if(draft.deleted_items.length)restore(draft.deleted_items.length-1);
@@ -406,6 +405,6 @@ globalThis.DragonAyumi = {
       catch(error){message(error.message);}
     };
     window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
-    return {reset(){generation++;planner?.reset();projects=[];draft=null;dirty=false;loading=false;dialog.close();el('ayumiFields').disabled=false;el('ayumiList').replaceChildren();el('ayumiArchivedList').replaceChildren();el('ayumiPicker').open=false;el('ayumiCurrent').textContent='目標を選ぶ';el('ayumiArchivedCount').textContent='保管庫（0件）';el('ayumiArchiveHint').textContent='';el('ayumiDayActions').replaceChildren();el('ayumiPastActions').replaceChildren();el('ayumiRecordBreakdown').replaceChildren();el('ayumiDayCount').textContent='';el('ayumiPastCount').textContent='';el('ayumiCount').textContent='';el('ayumiProgress').value=0;edit.open=false;past.open=false;dailyPages.clear();expanded.clear();el('ayumiPastDate').value=DragonAyumi.dailyToday();el('ayumiItems').replaceChildren();el('ayumiTrashList').replaceChildren();el('ayumiInsightList').replaceChildren();['ayumiName','ayumiDue','ayumiInsight'].forEach(id=>{el(id).value='';});saveState();message('');}};
+    return {reset(){generation++;planner?.reset();projects=[];draft=null;dirty=false;loading=false;dialog.close();el('ayumiFields').disabled=false;el('ayumiList').replaceChildren();el('ayumiArchivedList').replaceChildren();el('ayumiPicker').open=false;el('ayumiCurrent').textContent='目標を選ぶ';el('ayumiArchivedCount').textContent='保管庫（0件）';el('ayumiArchiveHint').textContent='';el('ayumiDayActions').replaceChildren();el('ayumiPastActions').replaceChildren();el('ayumiRecordBreakdown').replaceChildren();el('ayumiDayCount').textContent='';el('ayumiPastCount').textContent='';el('ayumiCount').textContent='';el('ayumiProgress').value=0;edit.open=false;past.open=false;dailyPages.clear();el('ayumiPastDate').value=DragonAyumi.dailyToday();el('ayumiItems').replaceChildren();el('ayumiTrashList').replaceChildren();el('ayumiInsightList').replaceChildren();['ayumiName','ayumiDue','ayumiInsight'].forEach(id=>{el(id).value='';});saveState();message('');}};
   }
 };

@@ -43,7 +43,7 @@
 @media(max-width:480px) { .ayumi-scroll { padding:16px; } .ayumi-savebar { padding-left:12px; padding-right:12px; } .ayumi-item { gap:4px; } .ayumi-item button { padding:6px; } }
 
 .ayumi-card {border:1px solid #64766e;border-radius:12px;padding:8px 12px;margin:12px 0;min-width:0;}
-.ayumi-card summary {overflow-wrap:anywhere;line-height:1.6;}
+.ayumi-item-heading {overflow-wrap:anywhere;line-height:1.6;margin:8px 0;font-size:1rem;font-weight:600;}
 .ayumi-weekly {border-top:1px solid #64766e;padding:12px 0;}
 #ayumiFields .ayumi-week {display:flex;align-items:center;gap:12px;min-height:44px;margin:6px 0;}
 .ayumi-week input {width:24px;height:24px;flex-shrink:0;accent-color:#99d6bb;}
@@ -58,7 +58,7 @@
 #ayumiArchivedList button {text-align:left;white-space:normal;overflow-wrap:anywhere;min-height:44px;}
 .ayumi-picker button[aria-current=true] {border-color:#b1dfc9;}
 #ayumiArchiveHint {font-size:13px;color:#b9cfc4;}
-.ayumi-card.ayumi-complete > summary,
+.ayumi-card.ayumi-complete > .ayumi-item-heading,
 .ayumi-card.ayumi-complete .ayumi-item > input[type=text],
 .ayumi-week input:checked + span,
 .ayumi-picker button.ayumi-complete {
