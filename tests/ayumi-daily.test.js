@@ -32,7 +32,7 @@ test('database daily roundtrip, old client guard, trash, invalid input and owner
  await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql as $$select nullif(current_setting('test.uid',true),'')::uuid$$;create function auth.jwt() returns jsonb language sql as $$select '{}'::jsonb$$;`);
  for(const name of ['20261030_ayumi.sql','20261030_ayumi_history.sql','20261031_ayumi_weeks.sql','20261031_ayumi_project_archive.sql','20261101_ayumi_daily.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'));
  const owner='11111111-1111-4111-8111-111111111111';await db.query('insert into auth.users values($1)',[owner]);
- const i=make();i.daily.checks[0].done=true;
+ const i=make();i.daily.checks[0].done=true;i.daily.checks[1].missed=true;
  const row=(await db.query("insert into ayumi_projects(user_id,title,items,daily_revision) values($1,'日別',$2,1) returning *",[owner,JSON.stringify([i])])).rows[0];
  await assert.rejects(db.query("update ayumi_projects set items='[]',version=version+1 where id=$1",[row.id]),/Reload required/);
  const trash=[{item:i,index:0,deleted_on:'2026-11-01'}];
@@ -46,4 +46,12 @@ test('database daily roundtrip, old client guard, trash, invalid input and owner
  assert.equal((await db.query("update ayumi_projects set title='other',version=version+1,daily_revision=daily_revision+1 returning id")).rows.length,0);
  await db.exec(`set test.uid='${owner}';`);assert.equal((await db.query('select * from ayumi_projects')).rows.length,1);
  }finally{await db.close();}
+});
+
+test('missed counts as recorded without becoming achieved and survives normalization',()=>{
+ const i=make();i.daily.checks[0].done=true;i.daily.checks[1].missed=true;
+ assert.deepEqual(a.progress([i]),{done:2,total:14,percent:14});
+ const restored=a.normalize({title:'test',items:[i]}).items[0];assert.equal(restored.daily.checks[1].missed,true);assert.equal(restored.daily.checks[1].done,false);
+ restored.daily.checks[1].missed=false;assert.equal(a.progress([restored]).done,1);
+ i.daily.checks[1].done=true;assert.throws(()=>a.normalize({title:'test',items:[i]}));
 });

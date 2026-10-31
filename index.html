@@ -617,7 +617,7 @@
   <dialog id="ayumiDialog" class="auth-dialog" aria-labelledby="ayumiTitle">
     <div class="ayumi-scroll">
     <h2 id="ayumiTitle">歩みを見る <small>Ver.1</small></h2>
-    <p>小さな一歩も、立ち止まって気づいたことも。あなたのペースで残していきましょう。</p>
+    <p>できたことを、ひとつずつ。</p>
     <p id="ayumiGuest">ログイン前はお試し編集です。保存はできず、再読み込みやログインで入力は消えます。</p>
     <details id="ayumiPicker" class="ayumi-picker">
       <summary id="ayumiCurrent">目標を選ぶ</summary>
@@ -646,7 +646,7 @@
       <legend class="sr-only">目標とチェックリスト</legend>
       <label for="ayumiName">目標・プロジェクト名</label><input id="ayumiName" type="text" maxlength="120" placeholder="例：Instagramの公開準備">
       <label for="ayumiDue">期限（任意）</label><input id="ayumiDue" type="date">
-      <p id="ayumiCount" aria-live="polite"></p><progress id="ayumiProgress" max="100" value="0" aria-label="完了した項目の割合"></progress>
+      <p id="ayumiCount" aria-live="polite"></p><progress id="ayumiProgress" max="100" value="0" aria-label="記録したチェックの割合"></progress>
       <div id="ayumiItems" aria-label="チェックリスト"></div>
       <div class="ayumi-actions"><button id="ayumiAdd" type="button" class="plain-button">＋ 一歩を追加</button><button id="ayumiUndo" type="button" class="plain-button" disabled>削除を元に戻す</button></div>
       <details id="ayumiTrash"><summary id="ayumiTrashCount">削除した項目（0件）</summary><p>削除した項目も「保存」で保管します。あとから選んで復元できます。</p><div id="ayumiTrashList"></div></details>

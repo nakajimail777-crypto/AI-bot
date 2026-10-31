@@ -50,7 +50,7 @@ globalThis.DragonAyumi = {
     const d=item.daily;
     if(!d||d.timezone!=='Asia/Tokyo'||!this.validDate(d.start)||!this.validDate(d.end)||d.start>d.end||!Array.isArray(d.checks)||d.checks.length>366||this.addDays(d.start,365)<d.end)throw new Error('日別の期間と保管する日付は各項目366日までです。');
     let previous='';const dates=new Set();
-    const checks=d.checks.map(c=>{if(!this.validDate(c.date)||typeof c.done!=='boolean'||c.date<=previous)throw new Error('日別の記録を確認してください。');previous=c.date;dates.add(c.date);return {date:c.date,done:c.done};});
+    const checks=d.checks.map(c=>{if(!this.validDate(c.date)||typeof c.done!=='boolean'||c.date<=previous)throw new Error('日別の記録を確認してください。');previous=c.date;dates.add(c.date);if(c.missed!==undefined&&(typeof c.missed!=='boolean'||(c.missed&&c.done)))throw new Error('日別の記録状態を確認してください。');return {date:c.date,done:c.done,...(c.missed!==undefined?{missed:c.missed}:{})};});
     for(let date=d.start;date<=d.end;date=this.addDays(date,1))if(!dates.has(date))throw new Error('日別の記録が不足しています。');
     return {daily:{start:d.start,end:d.end,timezone:d.timezone,checks}};
   },
@@ -85,7 +85,7 @@ globalThis.DragonAyumi = {
     next.insight=text;return next;
   },
   progress(items) {
-    const units=this.units(items), total = units.length, done = units.filter(item => item.done === true).length;
+    const units=this.units(items), total = units.length, done = units.filter(item => item.done === true || item.missed === true).length;
     return {done, total, percent:total ? Math.round(done / total * 100) : 0};
   },
   async user(db, owner) {
@@ -121,11 +121,35 @@ globalThis.DragonAyumi = {
   },
   prompt(project, reflect) {
     const p = this.normalize(project), count = this.progress(p.items);
-    return `${reflect ? 'この歩みを一緒に振り返ってください。成果だけでなく気づきも大切にしてください。' : 'この目標を無理のない小さな行動に分ける案をください。'}\n進捗の遅れを責めず、完璧な達成を求めないでください。チェックを完了したと判断したり、保存したと伝えたりしないでください。提案の採用と完了チェックは私が決めます。\n目標：${p.title}\n期限：${p.due_date || '設定なし'}\n歩み：${count.done}/${count.total}\n${p.items.map(i=>`${i.daily||i.weeks?.length?'':i.done?'☑':'☐'} ${i.text}${i.daily?'\n日別：'+i.daily.start+'〜'+i.daily.end+'（日本時間）\n'+this.units([i]).map(c=>(c.done?'☑':'☐')+' '+c.date).join('\n'):''}${(i.weeks||[]).map(w=>`\n  ${w.done?'☑':'☐'} ${w.start}〜${this.addDays(w.start,6)}`).join('')}`).join('\n')}\n今日の気づき：${p.insight || 'まだ記入していません'}${reflect?'\n最近の気づき（最大5件）：\n'+p.insight_history.slice(-5).map(n=>`${n.date||'日付未記録'}：${n.text}`).join('\n'):''}`;
+    return `${reflect ? 'この歩みを一緒に振り返ってください。成果だけでなく気づきも大切にしてください。' : 'この目標を無理のない小さな行動に分ける案をください。'}\n進捗の遅れを責めず、完璧な達成を求めないでください。チェックを完了したと判断したり、保存したと伝えたりしないでください。提案の採用と完了チェックは私が決めます。\n目標：${p.title}\n期限：${p.due_date || '設定なし'}\n歩み：${count.done}/${count.total}\n${p.items.map(i=>`${i.daily||i.weeks?.length?'':i.done?'☑':'☐'} ${i.text}${i.daily?'\n日別：'+i.daily.start+'〜'+i.daily.end+'（日本時間）\n'+this.units([i]).map(c=>(c.done?'できた':c.missed?'できなかった・記録済み':'未記録')+' '+c.date).join('\n'):''}${(i.weeks||[]).map(w=>`\n  ${w.done?'☑':'☐'} ${w.start}〜${this.addDays(w.start,6)}`).join('')}`).join('\n')}\n今日の気づき：${p.insight || 'まだ記入していません'}${reflect?'\n最近の気づき（最大5件）：\n'+p.insight_history.slice(-5).map(n=>`${n.date||'日付未記録'}：${n.text}`).join('\n'):''}`;
   },
   mount({context, prepareChat}) {
     const el = id => document.getElementById(id), dialog = el('ayumiDialog');
     const expanded=new Set(),dailyPages=new Map();
+    const fields=el('ayumiFields');
+    const todaySection=document.createElement('section');todaySection.className='ayumi-today-panel';
+    todaySection.innerHTML='<h3 id="ayumiDayHeading">今日の一歩</h3><div id="ayumiDayActions"></div><p id="ayumiDayCount" aria-live="polite"></p>';
+    const past=document.createElement('details');past.className='ayumi-simple-fold';
+    past.innerHTML='<summary>これまでの記録</summary><label for="ayumiPastDate">振り返る日</label><input id="ayumiPastDate" type="date"><div id="ayumiPastActions"></div><p id="ayumiPastCount" aria-live="polite"></p>';
+    const edit=document.createElement('details');edit.className='ayumi-simple-fold';edit.id='ayumiEdit';
+    const editTitle=document.createElement('summary');editTitle.textContent='目標・行動を編集';edit.append(editTitle);
+    const insightLabel=fields.querySelector('label[for=ayumiInsight]');
+    for(const child of [...fields.children]){if(child===insightLabel)break;if(child.tagName!=='LEGEND')edit.append(child);}
+    const archive=el('ayumiArchive').parentElement;edit.append(archive,el('ayumiPlanner'));
+    const aiActions=el('ayumiSplit').parentElement,aiHint=aiActions.nextElementSibling;edit.append(aiActions,aiHint);
+    const overview=document.createElement('section');overview.className='ayumi-overview';
+    const overviewTitle=document.createElement('h3');overviewTitle.textContent='記録の進み具合';
+    const overviewHint=document.createElement('p');overviewHint.className='ayumi-overview-hint';overviewHint.textContent='できた日も、できなかったと記録した日も、歩みに含めます。';
+    overview.append(overviewTitle,edit.querySelector('#ayumiCount'),edit.querySelector('#ayumiProgress'),overviewHint);
+    const timeline=document.createElement('div');timeline.id='ayumiRecordBreakdown';overview.append(timeline);
+    fields.insertBefore(overview,fields.querySelector('legend').nextSibling);overview.after(todaySection);
+    fields.append(past,edit);
+    past.append(el('ayumiInsights'));
+    el('ayumiHint').textContent='チェックと気づきは、下の「保存」で記録します。';
+    el('ayumiInsight').rows=2;
+    el('ayumiPastDate').max=DragonAyumi.dailyToday();el('ayumiPastDate').value=DragonAyumi.dailyToday();
+    el('ayumiPastDate').onchange=()=>renderDay();
+
     let projects = [], draft = null, dirty = false, generation = 0, loading = false;
     const message = text => { el('ayumiStatus').textContent = text; };
     const canSave = () => { const c=context(); return c.db && c.session && !c.session.user.is_anonymous; };
@@ -145,12 +169,42 @@ globalThis.DragonAyumi = {
       if(loading||!discard())return false;
       draft={...fresh(),title:plan.title,items:plan.items};dirty=true;render();
       message('案から新しい目標を作成しました。まだ保存していません。');
-      el('ayumiName').focus();return true;
+      edit.open=true;el('ayumiName').focus();return true;
     }});
+    function renderDay(){
+      const today=DragonAyumi.dailyToday();
+      el('ayumiDayHeading').textContent='今日の一歩　'+today.slice(5).replace('-','/');
+      for(const [date,container,countId] of [[today,el('ayumiDayActions'),'ayumiDayCount'],[el('ayumiPastDate').value,el('ayumiPastActions'),'ayumiPastCount']]){
+        container.replaceChildren();
+        if(!DragonAyumi.validDate(date)||date>today){el(countId).textContent='今日までの日付を選んでください。';continue;}
+        let total=0,done=0,missed=0;
+        for(const item of draft.items){
+          const unit=item.daily?item.daily.checks.find(d=>d.date===date&&date>=item.daily.start&&date<=item.daily.end):null;
+          if(!unit)continue;total++;if(unit.done)done++;if(unit.missed)missed++;
+          const label=document.createElement('div');label.className='ayumi-day-action';
+          const caption=document.createElement('p');caption.textContent=item.text||'新しい一歩';label.setAttribute('role','group');label.setAttribute('aria-label',caption.textContent);label.append(caption);
+          const choices=document.createElement('div');choices.className='ayumi-actions';
+          for(const [value,title] of [['done','できた'],['missed','できなかった'],['none','未記録に戻す']]){
+            const b=document.createElement('button');b.type='button';b.className='plain-button';b.textContent=title;
+            b.setAttribute('aria-pressed',String(value==='done'?unit.done:value==='missed'?unit.missed===true:!unit.done&&!unit.missed));
+            b.onclick=()=>{unit.done=value==='done';unit.missed=value==='missed';changed();renderItems();};choices.append(b);
+          }
+          label.append(choices);container.append(label);
+        }
+        el(countId).textContent=total?`${total}件中${done+missed}件を記録しました。できた ${done}件・できなかった ${missed}件`:'この日の日別の行動はまだありません。';
+        if(!total&&container.id==='ayumiDayActions'){
+          const b=document.createElement('button');b.type='button';b.className='plain-button';b.textContent='毎日の行動を設定する';b.onclick=()=>{edit.open=true;el('ayumiAdd').focus();};container.append(b);
+          const note=document.createElement('p');note.textContent='週別・単発の項目は「目標・行動を編集」で確認できます。';container.append(note);
+        }
+      }
+    }
     function progress() {
       const p=DragonAyumi.progress(draft.items);
-      const today=DragonAyumi.dailyToday(),doneToday=draft.items.flatMap(i=>i.daily?DragonAyumi.units([i]):[]).filter(d=>d.date===today&&d.done).length;
-      el('ayumiCount').textContent=`${p.done} / ${p.total} 完了 · ${p.percent}%`+(draft.items.some(i=>i.daily)?` · 今日${doneToday}個できた`:'');
+      el('ayumiCount').textContent=`${p.total}回分のうち ${p.done}回分を記録 · ${p.percent}%`;
+      const units=DragonAyumi.units(draft.items);
+      const timeline=el('ayumiRecordBreakdown');timeline.replaceChildren();
+      const breakdown=document.createElement('p');breakdown.textContent=`できた ${units.filter(d=>d.done).length}回・できなかった ${units.filter(d=>d.missed).length}回`;timeline.append(breakdown);
+
       el('ayumiProgress').value=p.percent;
     }
     function renderItems() {
@@ -211,7 +265,7 @@ globalThis.DragonAyumi = {
         };
         weekly.append(start,add);card.append(weekly);el('ayumiItems').append(card);
       });
-      progress();
+      progress();renderDay();
       const history=draft.deleted_items;
       el('ayumiUndo').disabled=!history.length;
       el('ayumiUndo').textContent=history.length?`削除を元に戻す（${history.length}件）`:'削除を元に戻す';
@@ -241,8 +295,8 @@ globalThis.DragonAyumi = {
       for(const day of days.slice(page*7,page*7+7)){
         const label=document.createElement('label');label.className='ayumi-week ayumi-day';if(day.date===today)label.classList.add('ayumi-today');
         const box=document.createElement('input');box.type='checkbox';box.checked=day.done;box.disabled=day.date>today;
-        const caption=document.createElement('span');caption.textContent=day.date+(day.date===today?' 今日':day.date>today?' これから':'');
-        box.onchange=()=>{day.done=box.checked;changed();progress();updateSummary();count.textContent=`${days.length}日中${days.filter(d=>d.done).length}日できた · 日本時間`;};label.append(box,caption);section.append(label);
+        const caption=document.createElement('span');caption.textContent=day.date+(day.date===today?' 今日':day.date>today?' これから':'')+(day.missed?' · できなかった（記録済み）':'');
+        box.onchange=()=>{day.done=box.checked;day.missed=false;changed();progress();renderDay();updateSummary();count.textContent=`${days.length}日中${days.filter(d=>d.done).length}日できた · 日本時間`;};label.append(box,caption);section.append(label);
       }
     }
     function restore(index){
@@ -308,17 +362,19 @@ globalThis.DragonAyumi = {
       try{
         const result=await DragonAyumi.list(c.db,c.session.user.id);
         if(g!==generation)return;
-        projects=result;dirty=false;draft=structuredClone(projects.find(p=>p.id===draft?.id)||projects.find(p=>!p.archived)||fresh());renderList();render();message(projects.length?'保存した歩みを読み込みました。':'最初の目標を作ってみましょう。');
+        projects=result;dirty=false;draft=structuredClone(projects.find(p=>p.id===draft?.id)||projects.find(p=>!p.archived)||fresh());edit.open=!draft.items.some(i=>i.daily);renderList();render();message(projects.length?'保存した歩みを読み込みました。':'最初の目標を作ってみましょう。');
       }catch(error){if(g===generation)message(error.message);}
       finally{if(g===generation){loading=false;el('ayumiFields').disabled=false;saveState();}}
     }
     el('openAyumi').onclick=()=>{
       if(!draft){draft=fresh();render();}
+      el('ayumiPastDate').max=DragonAyumi.dailyToday();renderDay();
+      if(!draft.title)edit.open=true;
       dialog.showModal();
       if(!dirty && canSave())void load();
     };
     el('closeAyumi').onclick=()=>dialog.close();
-    el('ayumiNew').onclick=()=>{if(loading||!discard())return;draft=fresh();dirty=false;render();renderList();el('ayumiPicker').open=false;message('目標と、できそうな一歩を書いてみましょう。');el('ayumiName').focus();};
+    el('ayumiNew').onclick=()=>{if(loading||!discard())return;draft=fresh();dirty=false;render();edit.open=true;renderList();el('ayumiPicker').open=false;message('目標と、できそうな一歩を書いてみましょう。');el('ayumiName').focus();};
     el('ayumiReload').onclick=load;
     el('ayumiArchive').onclick=()=>{if(loading||!draft?.version)return;draft.archived=!draft.archived;changed();message(draft.archived?'保管への変更は未保存です。「保存」で一覧を整理できます。':'取り組み中への変更は未保存です。「保存」で記録できます。');};
     ['ayumiName','ayumiDue','ayumiInsight'].forEach(id=>{el(id).oninput=changed;});
@@ -347,6 +403,6 @@ globalThis.DragonAyumi = {
       catch(error){message(error.message);}
     };
     window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
-    return {reset(){generation++;planner?.reset();projects=[];draft=null;dirty=false;loading=false;dialog.close();el('ayumiFields').disabled=false;el('ayumiList').replaceChildren();el('ayumiArchivedList').replaceChildren();el('ayumiPicker').open=false;el('ayumiCurrent').textContent='目標を選ぶ';el('ayumiArchivedCount').textContent='保管した目標（0件）';el('ayumiArchiveHint').textContent='';el('ayumiItems').replaceChildren();el('ayumiTrashList').replaceChildren();el('ayumiInsightList').replaceChildren();['ayumiName','ayumiDue','ayumiInsight'].forEach(id=>{el(id).value='';});saveState();message('');}};
+    return {reset(){generation++;planner?.reset();projects=[];draft=null;dirty=false;loading=false;dialog.close();el('ayumiFields').disabled=false;el('ayumiList').replaceChildren();el('ayumiArchivedList').replaceChildren();el('ayumiPicker').open=false;el('ayumiCurrent').textContent='目標を選ぶ';el('ayumiArchivedCount').textContent='保管した目標（0件）';el('ayumiArchiveHint').textContent='';el('ayumiDayActions').replaceChildren();el('ayumiPastActions').replaceChildren();el('ayumiRecordBreakdown').replaceChildren();el('ayumiDayCount').textContent='';el('ayumiPastCount').textContent='';el('ayumiCount').textContent='';el('ayumiProgress').value=0;edit.open=false;past.open=false;dailyPages.clear();expanded.clear();el('ayumiPastDate').value=DragonAyumi.dailyToday();el('ayumiItems').replaceChildren();el('ayumiTrashList').replaceChildren();el('ayumiInsightList').replaceChildren();['ayumiName','ayumiDue','ayumiInsight'].forEach(id=>{el(id).value='';});saveState();message('');}};
   }
 };

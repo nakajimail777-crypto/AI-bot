@@ -72,3 +72,20 @@
 .ayumi-day {min-height:44px;}
 .ayumi-today {border:1px solid currentColor;border-radius:8px;padding:6px;}
 .ayumi-daily p {font-size:.85rem;}
+
+.ayumi-today-panel {padding:4px 0 16px;}
+.ayumi-today-panel h3 {font-size:1.25rem;margin:12px 0;}
+#ayumiFields .ayumi-day-action {display:flex;align-items:center;gap:12px;min-height:58px;border:1px solid #64766e;border-radius:12px;padding:12px;margin:10px 0;background:#1c2923;}
+.ayumi-day-action input {width:26px;height:26px;flex-shrink:0;accent-color:#b1dfc9;}
+.ayumi-day-action input:checked + span {text-decoration:line-through;color:#b5d7c8;}
+#ayumiDayCount {color:#b1dfc9;font-size:1.1rem;}
+.ayumi-simple-fold {border-top:1px solid #64766e;margin:20px 0 0;padding-top:6px;}
+#ayumiInsight {min-height:64px;}
+
+.ayumi-overview {border:1px solid #64766e;background:#1c2923;border-radius:12px;padding:16px;margin:4px 0 20px;}
+.ayumi-overview h3 {margin:0;font-size:1rem;}
+.ayumi-overview #ayumiCount {font-size:1.1rem;font-weight:600;margin:12px 0;}
+.ayumi-overview-hint {font-size:.8rem;color:#b9cfc4;margin:8px 0 0;}
+
+#ayumiFields .ayumi-day-action {display:block;}
+.ayumi-day-action button[aria-pressed=true] {background:#b1dfc9;color:#13241b;border:2px solid #b1dfc9;}

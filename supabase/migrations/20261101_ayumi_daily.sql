@@ -10,9 +10,10 @@ begin
  or jsonb_typeof(d->'checks') is distinct from 'array' then return false; end if;
  if (d->>'end')::date < (d->>'start')::date or (d->>'end')::date-(d->>'start')::date>365 or jsonb_array_length(d->'checks')>366 then return false; end if;
  for c in select value from jsonb_array_elements(d->'checks') loop
-  if jsonb_typeof(c) is distinct from 'object' or (c-'date'-'done')<>'{}'::jsonb
+  if jsonb_typeof(c) is distinct from 'object' or (c-'date'-'done'-'missed')<>'{}'::jsonb
   or not public.ayumi_date_valid(c->>'date') or jsonb_typeof(c->'done') is distinct from 'boolean'
   or c->>'date'<=previous then return false; end if;
+  if c ? 'missed' and (jsonb_typeof(c->'missed') is distinct from 'boolean' or (c->>'missed'='true' and c->>'done'='true')) then return false; end if;
   previous:=c->>'date';
   if (c->>'date')::date between (d->>'start')::date and (d->>'end')::date then active_count:=active_count+1; end if;
  end loop;
