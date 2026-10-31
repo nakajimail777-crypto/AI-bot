@@ -89,3 +89,6 @@
 
 #ayumiFields .ayumi-day-action {display:block;}
 .ayumi-day-action button[aria-pressed=true] {background:#b1dfc9;color:#13241b;border:2px solid #b1dfc9;}
+
+.ayumi-overview .ayumi-actions {margin-bottom:0;}
+#ayumiArchiveHint {flex-basis:100%;order:2;}
