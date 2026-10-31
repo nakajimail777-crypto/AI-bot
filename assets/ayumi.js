@@ -217,13 +217,23 @@ globalThis.DragonAyumi = {
     }
     const changed = () => { dirty=true;saveState();updateCurrent(); message('未保存の変更があります。「保存」で記録できます。'); };
     const read = () => ({...draft,title:el('ayumiName').value,due_date:el('ayumiDue').value||null,insight:el('ayumiInsight').value});
-    const planner=globalThis.DragonAyumiPlanner?.mount({context,apply(plan,append){
+    let pendingProposal=null;
+    const planner=globalThis.DragonAyumiPlanner?.mount({context,async apply(plan,append){
       if(loading)return false;
       if(append){draft=DragonAyumi.appendPlan(read(),plan);dirty=true;render();message('現在の目標に案を追加しました。「保存」で記録できます。');return true;}
-      if(loading||!discard())return false;
-      draft={...fresh(),title:plan.title,items:plan.items};dirty=true;render();
-      message('案から新しい目標を作成しました。まだ保存していません。');
-      other.open=true;edit.open=true;el('ayumiName').focus();return true;
+      if(!canSave())throw new Error('新しい目標を保存するにはログインしてください。');
+      const key=JSON.stringify([plan.title,plan.items.map(item=>item.text)]);
+      if(pendingProposal?.key!==key||pendingProposal.id!==draft?.id){
+        if(!discard())return false;
+        draft={...fresh(),title:plan.title,items:plan.items};dirty=true;render();
+        pendingProposal={key,id:draft.id};
+      }
+      await el('ayumiSave').onclick();
+      if(dirty)throw new Error(el('ayumiStatus').textContent||'保存できませんでした。案は残っています。');
+      if(draft?.id!==pendingProposal?.id)return false;
+      pendingProposal=null;el('ayumiPicker').open=true;other.open=false;
+      message('AIの案を新しい目標として保存しました。取り組み中の目標に追加されています。');
+      el('ayumiCurrent').focus();return true;
     }});
     function renderDay(){
       const today=DragonAyumi.dailyToday();
