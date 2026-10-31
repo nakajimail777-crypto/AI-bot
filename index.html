@@ -629,7 +629,7 @@
     <div class="ayumi-actions"><button id="ayumiArchive" class="plain-button" type="button">この目標を保管</button><span id="ayumiArchiveHint"></span></div>
     <details id="ayumiPlanner">
       <summary>目標からチェックリスト案を作る</summary>
-      <p>目標を入力 → 案を確認・編集 →「この内容で作成」→「保存」の順で作れます。</p>
+      <p>目標を入力 → 案を確認・編集 → 今の目標に追加、または新しく作成 →「保存」の順で記録できます。</p>
       <label for="ayumiPlanGoal">やりたいこと</label>
       <textarea id="ayumiPlanGoal" maxlength="2000" rows="3" placeholder="例：11月9日にInstagramを公開したい"></textarea>
       <p>「AIで案を作る」を押すと、この目標をGoogle Geminiへ送ります。ログインが必要です。提案はまだ保存されません。</p>
@@ -637,8 +637,8 @@
       <section id="ayumiPlanReview" hidden aria-label="チェックリスト案の確認">
         <label for="ayumiPlanTitle">目標名の案</label><input id="ayumiPlanTitle" maxlength="120">
         <div id="ayumiPlanItems"></div>
-        <div class="ayumi-actions"><button id="ayumiPlanApply" class="plain-button" type="button">この内容で作成</button><button id="ayumiPlanCancel" class="plain-button" type="button">案を取り消す</button></div>
-        <p>新しい目標として作成します。すべて未完了で始まり、「保存」まで記録しません。</p>
+        <div class="ayumi-actions"><button id="ayumiPlanAppend" class="plain-button" type="button">現在の目標に追加</button><button id="ayumiPlanApply" class="plain-button" type="button">この内容で作成</button><button id="ayumiPlanCancel" class="plain-button" type="button">案を取り消す</button></div>
+        <p>「現在の目標に追加」は目標名・期限・記録を残して項目を足します。「この内容で作成」は新しい目標を作ります。どちらも未完了で追加し、「保存」まで記録しません。</p>
       </section>
       <p id="ayumiPlanStatus" role="status"></p>
     </details>

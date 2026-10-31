@@ -66,3 +66,9 @@
   text-decoration-thickness:1.5px;
   color:#b5d7c8;
 }
+
+.ayumi-daily { margin-top:12px; }
+.ayumi-daily input[type=date] {max-width:100%; box-sizing:border-box;}
+.ayumi-day {min-height:44px;}
+.ayumi-today {border:1px solid currentColor;border-radius:8px;padding:6px;}
+.ayumi-daily p {font-size:.85rem;}

@@ -11,7 +11,7 @@ globalThis.DragonAyumi = {
       const text = String(item.text || '').trim();
       if (!text || text.length > 300 || typeof item.id !== 'string' || !item.id || item.id.length > 80 || ids.has(item.id) || typeof item.done !== 'boolean') throw new Error('各項目を1〜300文字で入力してください。');
       ids.add(item.id);
-      return {id:item.id, text, done:item.done, ...this.weekFields(item)};
+      return {id:item.id, text, done:item.done, ...this.weekFields(item),...this.dailyFields(item)};
     });
     const insight = String(value.insight || '').trim();
     if (insight.length > 500) throw new Error('今日の気づきは500文字までです。');
@@ -21,8 +21,9 @@ globalThis.DragonAyumi = {
       const item=entry.item;
       if(!item || typeof item.id!=='string' || !item.id || item.id.length>80 || ids.has(item.id) || typeof item.text!=='string' || item.text.length>300 || typeof item.done!=='boolean' || !Number.isInteger(entry.index) || entry.index<0 || entry.index>99 || !this.validDate(entry.deleted_on))throw new Error('削除した項目の形式を確認してください。');
       ids.add(item.id);
-      return {item:{id:item.id,text:item.text,done:item.done,...this.weekFields(item)},index:entry.index,deleted_on:entry.deleted_on};
+      return {item:{id:item.id,text:item.text,done:item.done,...this.weekFields(item),...this.dailyFields(item)},index:entry.index,deleted_on:entry.deleted_on};
     });
+    if([...items,...trash.map(e=>e.item)].reduce((n,i)=>n+(i.daily?.checks.length||0),0)>5000)throw new Error('日別の記録は削除した項目を含め5,000件までです。');
     const insight_history=value.insight_history||[];
     if(!Array.isArray(insight_history)||insight_history.length>500)throw new Error('気づきの履歴は500件までです。');
     const noteIds=new Set();
@@ -43,8 +44,29 @@ globalThis.DragonAyumi = {
     });
     return {weeks};
   },
+  dailyFields(item){
+    if(item.daily===undefined)return {};
+    if(item.weeks?.length)throw new Error('日別と週別は別の項目で記録してください。');
+    const d=item.daily;
+    if(!d||d.timezone!=='Asia/Tokyo'||!this.validDate(d.start)||!this.validDate(d.end)||d.start>d.end||!Array.isArray(d.checks)||d.checks.length>366||this.addDays(d.start,365)<d.end)throw new Error('日別の期間と保管する日付は各項目366日までです。');
+    let previous='';const dates=new Set();
+    const checks=d.checks.map(c=>{if(!this.validDate(c.date)||typeof c.done!=='boolean'||c.date<=previous)throw new Error('日別の記録を確認してください。');previous=c.date;dates.add(c.date);return {date:c.date,done:c.done};});
+    for(let date=d.start;date<=d.end;date=this.addDays(date,1))if(!dates.has(date))throw new Error('日別の記録が不足しています。');
+    return {daily:{start:d.start,end:d.end,timezone:d.timezone,checks}};
+  },
+  dailyRange(start,end,existing){
+    if(!this.validDate(start)||!this.validDate(end)||start>end||this.addDays(start,365)<end)throw new Error('開始日から終了日まで366日以内で指定してください。');
+    const records=new Map((existing?.checks||[]).map(c=>[c.date,{...c}]));
+    for(let date=start;date<=end;date=this.addDays(date,1))if(!records.has(date))records.set(date,{date,done:false});
+    return this.dailyFields({daily:{start,end,timezone:'Asia/Tokyo',checks:[...records.values()].sort((a,b)=>a.date.localeCompare(b.date))}}).daily;
+  },
+  dailyToday(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());},
+  appendPlan(project,plan){
+    if(project.items.length+plan.items.length>100)throw new Error('項目は100件までです。');
+    return {...project,items:[...project.items,...structuredClone(plan.items)]};
+  },
   addDays(date,days){const d=new Date(date+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);},
-  units(items){return items.flatMap(i=>i.weeks?.length?i.weeks:[i]);},
+  units(items){return items.flatMap(i=>i.daily?i.daily.checks.filter(c=>c.date>=i.daily.start&&c.date<=i.daily.end):i.weeks?.length?i.weeks:[i]);},
   validDate(value){return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;},
   today(){const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;},
   hydrate(value){
@@ -82,6 +104,7 @@ globalThis.DragonAyumi = {
   },
   async save(db, owner, project) {
     const payload = this.normalize(project);
+    if(project.daily_revision||[...payload.items,...payload.deleted_items.map(e=>e.item)].some(i=>i.daily))payload.daily_revision=(project.daily_revision||0)+1;
     await this.user(db, owner);
     let query = db.from('ayumi_projects');
     query = project.version == null
@@ -91,17 +114,18 @@ globalThis.DragonAyumi = {
     if (!error && data) return data;
     // If a response was lost, a repeated Save is successful only for identical data.
     const current = await db.from('ayumi_projects').select('*').eq('id',project.id).eq('user_id',owner).maybeSingle();
-    if (!current.error && current.data && JSON.stringify(this.normalize(current.data)) === JSON.stringify(payload)) return current.data;
+    if (!current.error && current.data && JSON.stringify(this.normalize(current.data)) === JSON.stringify(this.normalize(project))) return current.data;
+    if(error?.message?.includes('Reload required'))throw new Error('日別記録を守るため保存を止めました。入力を控えて画面を再読み込みしてください。');
     if ((!error && !data) || error?.code === '23505') throw new Error('別の画面で更新されています。入力を控えてから一覧を再読み込みしてください。');
     throw new Error('保存できませんでした。入力は残っています。接続を確認して再度保存してください。');
   },
   prompt(project, reflect) {
     const p = this.normalize(project), count = this.progress(p.items);
-    return `${reflect ? 'この歩みを一緒に振り返ってください。成果だけでなく気づきも大切にしてください。' : 'この目標を無理のない小さな行動に分ける案をください。'}\n進捗の遅れを責めず、完璧な達成を求めないでください。チェックを完了したと判断したり、保存したと伝えたりしないでください。提案の採用と完了チェックは私が決めます。\n目標：${p.title}\n期限：${p.due_date || '設定なし'}\n歩み：${count.done}/${count.total}\n${p.items.map(i=>`${i.weeks?.length?'':i.done?'☑':'☐'} ${i.text}${(i.weeks||[]).map(w=>`\n  ${w.done?'☑':'☐'} ${w.start}〜${this.addDays(w.start,6)}`).join('')}`).join('\n')}\n今日の気づき：${p.insight || 'まだ記入していません'}${reflect?'\n最近の気づき（最大5件）：\n'+p.insight_history.slice(-5).map(n=>`${n.date||'日付未記録'}：${n.text}`).join('\n'):''}`;
+    return `${reflect ? 'この歩みを一緒に振り返ってください。成果だけでなく気づきも大切にしてください。' : 'この目標を無理のない小さな行動に分ける案をください。'}\n進捗の遅れを責めず、完璧な達成を求めないでください。チェックを完了したと判断したり、保存したと伝えたりしないでください。提案の採用と完了チェックは私が決めます。\n目標：${p.title}\n期限：${p.due_date || '設定なし'}\n歩み：${count.done}/${count.total}\n${p.items.map(i=>`${i.daily||i.weeks?.length?'':i.done?'☑':'☐'} ${i.text}${i.daily?'\n日別：'+i.daily.start+'〜'+i.daily.end+'（日本時間）\n'+this.units([i]).map(c=>(c.done?'☑':'☐')+' '+c.date).join('\n'):''}${(i.weeks||[]).map(w=>`\n  ${w.done?'☑':'☐'} ${w.start}〜${this.addDays(w.start,6)}`).join('')}`).join('\n')}\n今日の気づき：${p.insight || 'まだ記入していません'}${reflect?'\n最近の気づき（最大5件）：\n'+p.insight_history.slice(-5).map(n=>`${n.date||'日付未記録'}：${n.text}`).join('\n'):''}`;
   },
   mount({context, prepareChat}) {
     const el = id => document.getElementById(id), dialog = el('ayumiDialog');
-    const expanded=new Set();
+    const expanded=new Set(),dailyPages=new Map();
     let projects = [], draft = null, dirty = false, generation = 0, loading = false;
     const message = text => { el('ayumiStatus').textContent = text; };
     const canSave = () => { const c=context(); return c.db && c.session && !c.session.user.is_anonymous; };
@@ -115,7 +139,9 @@ globalThis.DragonAyumi = {
     }
     const changed = () => { dirty=true;saveState();updateCurrent(); message('未保存の変更があります。「保存」で記録できます。'); };
     const read = () => ({...draft,title:el('ayumiName').value,due_date:el('ayumiDue').value||null,insight:el('ayumiInsight').value});
-    const planner=globalThis.DragonAyumiPlanner?.mount({context,apply(plan){
+    const planner=globalThis.DragonAyumiPlanner?.mount({context,apply(plan,append){
+      if(loading)return false;
+      if(append){draft=DragonAyumi.appendPlan(read(),plan);dirty=true;render();message('現在の目標に案を追加しました。「保存」で記録できます。');return true;}
       if(loading||!discard())return false;
       draft={...fresh(),title:plan.title,items:plan.items};dirty=true;render();
       message('案から新しい目標を作成しました。まだ保存していません。');
@@ -123,7 +149,8 @@ globalThis.DragonAyumi = {
     }});
     function progress() {
       const p=DragonAyumi.progress(draft.items);
-      el('ayumiCount').textContent=`${p.done} / ${p.total} 完了 · ${p.percent}%`;
+      const today=DragonAyumi.dailyToday(),doneToday=draft.items.flatMap(i=>i.daily?DragonAyumi.units([i]):[]).filter(d=>d.date===today&&d.done).length;
+      el('ayumiCount').textContent=`${p.done} / ${p.total} 完了 · ${p.percent}%`+(draft.items.some(i=>i.daily)?` · 今日${doneToday}個できた`:'');
       el('ayumiProgress').value=p.percent;
     }
     function renderItems() {
@@ -136,7 +163,7 @@ globalThis.DragonAyumi = {
         updateSummary();card.append(summary);
         const row=document.createElement('div'); row.className='ayumi-item';
         const check=document.createElement('input'); check.type='checkbox'; check.checked=item.done; check.setAttribute('aria-label',`項目${index+1}の完了`);
-        check.hidden=!!item.weeks?.length;
+        check.hidden=!!item.weeks?.length||!!item.daily;
         check.onchange=()=>{item.done=check.checked;changed();progress();updateSummary();};
         const text=document.createElement('input'); text.type='text'; text.maxLength=300; text.value=item.text; text.placeholder='小さな一歩を書いてみましょう'; text.setAttribute('aria-label',`項目${index+1}`);
         text.oninput=()=>{item.text=text.value;changed();updateSummary();};
@@ -161,7 +188,8 @@ globalThis.DragonAyumi = {
           actions.append(move);
         }
         actions.append(remove);row.append(check,text,actions);card.append(row);
-        const weekly=document.createElement('div');weekly.className='ayumi-weekly';
+        renderDaily(card,item,index,updateSummary);
+        const weekly=document.createElement('div');weekly.hidden=!!item.daily;weekly.className='ayumi-weekly';
         const hint=document.createElement('p');hint.textContent='週ごとに記録する場合は開始日を選んで追加します。チェックは自分で付け、保存してください。';weekly.append(hint);
         for(const week of item.weeks||[]){
           const label=document.createElement('label');label.className='ayumi-week';
@@ -188,6 +216,34 @@ globalThis.DragonAyumi = {
       el('ayumiUndo').disabled=!history.length;
       el('ayumiUndo').textContent=history.length?`削除を元に戻す（${history.length}件）`:'削除を元に戻す';
       renderTrash();
+    }
+    function renderDaily(card,item,index,updateSummary){
+      const section=document.createElement('div');section.className='ayumi-daily';card.append(section);
+      if(item.weeks?.length){const note=document.createElement('p');note.textContent='日別の記録は「項目を追加」で別の項目を作ってください。';section.append(note);return;}
+      const settings=document.createElement('details'),heading=document.createElement('summary');heading.textContent=item.daily?'日別の期間を変更':'1日ずつチェックする';settings.append(heading);section.append(settings);
+      const start=document.createElement('input'),end=document.createElement('input');start.type=end.type='date';start.value=item.daily?.start||DragonAyumi.dailyToday();end.value=item.daily?.end||el('ayumiDue').value||start.value;
+      for(const [input,label] of [[start,'開始日'],[end,'終了日']]){const wrapper=document.createElement('label');wrapper.textContent=label;input.setAttribute('aria-label',`項目${index+1}の日別${label}`);wrapper.append(input);settings.append(wrapper);}
+      const button=document.createElement('button');button.type='button';button.className='plain-button';button.textContent=item.daily?'期間を反映':'日付のチェック欄を作る';settings.append(button);
+      const hint=document.createElement('p');hint.textContent='日本時間・最大366日。期間を短くしても過去の記録は残ります。変更後は「保存」してください。';settings.append(hint);
+      button.onclick=()=>{try{
+        if(!item.daily&&item.done){message('完了した項目は残して、新しい項目に日別の記録を作ってください。');return;}
+        const daily=DragonAyumi.dailyRange(start.value,end.value,item.daily);
+        const total=[...draft.items,...draft.deleted_items.map(e=>e.item)].reduce((n,i)=>n+(i.id===item.id?daily.checks.length:i.daily?.checks.length||0),0);
+        if(total>5000)throw new Error('日別の記録は全体で5,000件までです。');
+        item.daily=daily;dailyPages.delete(item.id);expanded.add(item.id);changed();renderItems();
+      }catch(error){message(error.message);}};
+      if(!item.daily)return;
+      const days=DragonAyumi.units([item]),today=DragonAyumi.dailyToday();
+      let page=dailyPages.get(item.id)??Math.floor((days.findIndex(d=>d.date>=today)<0?days.length-1:days.findIndex(d=>d.date>=today))/7);page=Math.min(page,Math.floor((days.length-1)/7));
+      const count=document.createElement('p');count.textContent=`${days.length}日中${days.filter(d=>d.done).length}日できた · 日本時間`;section.append(count);
+      const nav=document.createElement('div');nav.className='ayumi-actions';section.append(nav);
+      for(const [label,target,disabled] of [['前の7日',page-1,page===0],['今日',Math.floor((days.findIndex(d=>d.date>=today)<0?days.length-1:days.findIndex(d=>d.date>=today))/7),false],['次の7日',page+1,(page+1)*7>=days.length]]){const b=document.createElement('button');b.type='button';b.className='plain-button';b.textContent=label;b.disabled=disabled;b.onclick=()=>{dailyPages.set(item.id,target);renderItems();};nav.append(b);}
+      for(const day of days.slice(page*7,page*7+7)){
+        const label=document.createElement('label');label.className='ayumi-week ayumi-day';if(day.date===today)label.classList.add('ayumi-today');
+        const box=document.createElement('input');box.type='checkbox';box.checked=day.done;box.disabled=day.date>today;
+        const caption=document.createElement('span');caption.textContent=day.date+(day.date===today?' 今日':day.date>today?' これから':'');
+        box.onchange=()=>{day.done=box.checked;changed();progress();updateSummary();count.textContent=`${days.length}日中${days.filter(d=>d.done).length}日できた · 日本時間`;};label.append(box,caption);section.append(label);
+      }
     }
     function restore(index){
       if(draft.items.length>=100){message('項目は100件までです。空きを作ってから復元してください。');return;}
@@ -283,7 +339,7 @@ globalThis.DragonAyumi = {
         const saved=await DragonAyumi.save(c.db,c.session.user.id,draft);
         if(g!==generation)return;
         draft=saved;dirty=false;projects=[saved,...projects.filter(p=>p.id!==saved.id)];renderList();render();message('歩みを保存しました。あなたのペースで大丈夫です。');
-      }catch(error){if(g===generation)message(error.message);}
+      }catch(error){if(g===generation){render();message(error.message);}}
       finally{if(g===generation){loading=false;el('ayumiFields').disabled=false;saveState();}}
     };
     for(const [id,reflect] of [['ayumiSplit',false],['ayumiReflect',true]])el(id).onclick=()=>{

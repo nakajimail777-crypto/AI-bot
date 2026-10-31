@@ -35,7 +35,7 @@ globalThis.DragonAyumiPlanner={
         const result=await response.json();if(v!==version)return;
         if(!response.ok)throw new Error(result.error||'案を作れませんでした。');
         DragonAyumiPlanner.plan(result.plan);plan={title:result.plan.title,items:[...result.plan.items]};render();
-        status(result.preview===true?'操作確認用の模擬応答です。実際のAIには接続していません。':'案ができました。編集して「この内容で作成」を押してください。まだ保存していません。');
+        status(result.preview===true?'操作確認用の模擬応答です。実際のAIには接続していません。':'案ができました。編集して、今の目標に追加するか、新しく作成するか選んでください。まだ保存していません。');
       }catch(error){if(v===version)status(error.name==='AbortError'?'作成を中止しました。入力は残っています。':error.message||'案を作れませんでした。');}
       finally{clearTimeout(timeout);if(v===version){controller=null;el('ayumiPlanGenerate').disabled=false;el('ayumiPlanGoal').disabled=false;}}
     };
@@ -44,6 +44,7 @@ globalThis.DragonAyumiPlanner={
       try{if(!plan)return;const clean=this.plan(plan);if(!apply(clean))return;clear();status('新しい目標を作成しました。画面下の「保存」で記録できます。');}
       catch(error){status(error.message);}
     };
+    el('ayumiPlanAppend').onclick=()=>{try{if(!plan)return;if(!apply(this.plan(plan),true))return;clear();status('現在の目標に追加しました。「保存」で記録できます。');}catch(error){status(error.message);}};
     el('ayumiPlanCancel').onclick=()=>{version++;controller?.abort();controller=null;clear();el('ayumiPlanGenerate').disabled=false;el('ayumiPlanGoal').disabled=false;status('案を取り消しました。今の目標は変更していません。');};
     return {reset(){version++;controller?.abort();controller=null;clear();el('ayumiPlanGenerate').disabled=false;el('ayumiPlanGoal').disabled=false;el('ayumiPlanGoal').value='';status('');}};
   }
