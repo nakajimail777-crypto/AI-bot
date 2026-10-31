@@ -619,8 +619,14 @@
     <h2 id="ayumiTitle">歩みを見る <small>Ver.1</small></h2>
     <p>小さな一歩も、立ち止まって気づいたことも。あなたのペースで残していきましょう。</p>
     <p id="ayumiGuest">ログイン前はお試し編集です。保存はできず、再読み込みやログインで入力は消えます。</p>
-    <div class="ayumi-actions"><button id="ayumiNew" class="plain-button" type="button">新しい目標</button><button id="ayumiReload" class="plain-button" type="button">保存した歩みを再読み込み</button></div>
-    <nav id="ayumiList" aria-label="保存した目標"></nav>
+    <details id="ayumiPicker" class="ayumi-picker">
+      <summary id="ayumiCurrent">目標を選ぶ</summary>
+      <button id="ayumiNew" class="plain-button" type="button">＋ 新しい目標</button>
+      <nav id="ayumiList" aria-label="取り組み中の目標"></nav>
+      <details id="ayumiArchived"><summary id="ayumiArchivedCount">保管した目標（0件）</summary><nav id="ayumiArchivedList" aria-label="保管した目標"></nav></details>
+      <button id="ayumiReload" class="plain-button" type="button">保存した歩みを再読み込み</button>
+    </details>
+    <div class="ayumi-actions"><button id="ayumiArchive" class="plain-button" type="button">この目標を保管</button><span id="ayumiArchiveHint"></span></div>
     <details id="ayumiPlanner">
       <summary>目標からチェックリスト案を作る</summary>
       <p>目標を入力 → 案を確認・編集 →「この内容で作成」→「保存」の順で作れます。</p>

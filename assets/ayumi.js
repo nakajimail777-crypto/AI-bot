@@ -30,7 +30,8 @@ globalThis.DragonAyumi = {
       if(typeof entry.id!=='string'||!entry.id||entry.id.length>80||noteIds.has(entry.id)||typeof entry.text!=='string'||!entry.text.trim()||entry.text.length>500||(entry.date!==null&&!this.validDate(entry.date)))throw new Error('気づきの履歴の形式を確認してください。');
       noteIds.add(entry.id);return {id:entry.id,date:entry.date,text:entry.text};
     });
-    return {title, due_date, items, insight, deleted_items:trash, insight_history:history};
+    if(value.archived!==undefined&&typeof value.archived!=='boolean')throw new Error('保管状態を確認してください。');
+    return {title, due_date, items, insight, deleted_items:trash, insight_history:history, archived:value.archived??false};
   },
   weekFields(item){
     if(item.weeks===undefined)return {};
@@ -110,8 +111,9 @@ globalThis.DragonAyumi = {
       el('ayumiDirty').dataset.dirty=String(dirty);
       el('ayumiSave').disabled=loading||!canSave();
       el('ayumiSave').textContent=loading?'処理中…':'保存';
+      el('ayumiArchive').disabled=loading||!draft?.version;
     }
-    const changed = () => { dirty=true;saveState(); message('未保存の変更があります。「保存」で記録できます。'); };
+    const changed = () => { dirty=true;saveState();updateCurrent(); message('未保存の変更があります。「保存」で記録できます。'); };
     const read = () => ({...draft,title:el('ayumiName').value,due_date:el('ayumiDue').value||null,insight:el('ayumiInsight').value});
     const planner=globalThis.DragonAyumiPlanner?.mount({context,apply(plan){
       if(loading||!discard())return false;
@@ -130,7 +132,7 @@ globalThis.DragonAyumi = {
         const card=document.createElement('details');card.className='ayumi-card';card.open=expanded.has(item.id);
         card.ontoggle=()=>{if(!card.isConnected)return;if(card.open)expanded.add(item.id);else expanded.delete(item.id);};
         const summary=document.createElement('summary');
-        const updateSummary=()=>{const p=DragonAyumi.progress([item]);summary.textContent=(item.text||'新しい一歩')+' · '+p.done+'/'+p.total;};
+        const updateSummary=()=>{const p=DragonAyumi.progress([item]);summary.textContent=(item.text||'新しい一歩')+' · '+p.done+'/'+p.total;card.classList.toggle('ayumi-complete',p.total>0&&p.done===p.total);};
         updateSummary();card.append(summary);
         const row=document.createElement('div'); row.className='ayumi-item';
         const check=document.createElement('input'); check.type='checkbox'; check.checked=item.done; check.setAttribute('aria-label',`項目${index+1}の完了`);
@@ -165,6 +167,7 @@ globalThis.DragonAyumi = {
           const label=document.createElement('label');label.className='ayumi-week';
           const box=document.createElement('input');box.type='checkbox';box.checked=week.done;
           const caption=document.createElement('span');caption.textContent=week.start+' 〜 '+DragonAyumi.addDays(week.start,6);
+          // Native checked state also restores the visual completion mark after loading.
           box.onchange=()=>{week.done=box.checked;changed();progress();updateSummary();};
           label.append(box,caption);weekly.append(label);
         }
@@ -220,17 +223,27 @@ globalThis.DragonAyumi = {
       el('ayumiSave').disabled=!canSave();
       el('ayumiGuest').hidden=!!canSave();
       renderItems();
-      renderInsights();saveState();
+      renderInsights();saveState();updateCurrent();
     }
     const discard = () => !dirty || confirm('未保存の変更を破棄しますか？');
+    function updateCurrent(){
+      const title=el('ayumiName').value.trim()||'新しい目標';
+      el('ayumiCurrent').textContent=(draft?.archived?'保管中：':'現在の目標：')+title;
+      el('ayumiArchive').textContent=draft?.archived?'取り組み中に戻す':'この目標を保管';
+      el('ayumiArchiveHint').textContent=draft?.archived?'保管中です。戻した後は「保存」で記録します。':'保管・戻す操作も「保存」で記録します。';
+    }
     function renderList() {
-      el('ayumiList').replaceChildren();
+      el('ayumiList').replaceChildren();el('ayumiArchivedList').replaceChildren();
+      el('ayumiArchivedCount').textContent='保管した目標（'+projects.filter(p=>p.archived).length+'件）';
       for(const project of projects){
         const button=document.createElement('button');button.type='button';button.className='plain-button';
-        const p=DragonAyumi.progress(project.items);button.textContent=`${project.title}（${p.done}/${p.total}）`;
-        button.onclick=()=>{if(loading||!discard())return;draft=structuredClone(project);dirty=false;render();message('保存した歩みを開きました。');};
-        el('ayumiList').append(button);
+        const p=DragonAyumi.progress(project.items);button.textContent=project.title+'（'+p.done+'/'+p.total+'）';
+        button.classList.toggle('ayumi-complete',p.total>0&&p.done===p.total);
+        button.setAttribute('aria-current',String(project.id===draft?.id));
+        button.onclick=()=>{if(loading||!discard())return;draft=structuredClone(project);dirty=false;render();renderList();el('ayumiPicker').open=false;message(project.archived?'保管した目標を開きました。「取り組み中に戻す」で戻せます。':'保存した歩みを開きました。');};
+        el(project.archived?'ayumiArchivedList':'ayumiList').append(button);
       }
+      if(!projects.some(p=>!p.archived)){const note=document.createElement('p');note.textContent='取り組み中の目標はありません。「＋ 新しい目標」から作れます。';el('ayumiList').append(note);}
     }
     async function load() {
       if(loading || !discard())return;
@@ -239,7 +252,7 @@ globalThis.DragonAyumi = {
       try{
         const result=await DragonAyumi.list(c.db,c.session.user.id);
         if(g!==generation)return;
-        projects=result;dirty=false;draft=structuredClone(projects.find(p=>p.id===draft?.id)||projects[0]||fresh());renderList();render();message(projects.length?'保存した歩みを読み込みました。':'最初の目標を作ってみましょう。');
+        projects=result;dirty=false;draft=structuredClone(projects.find(p=>p.id===draft?.id)||projects.find(p=>!p.archived)||fresh());renderList();render();message(projects.length?'保存した歩みを読み込みました。':'最初の目標を作ってみましょう。');
       }catch(error){if(g===generation)message(error.message);}
       finally{if(g===generation){loading=false;el('ayumiFields').disabled=false;saveState();}}
     }
@@ -249,8 +262,9 @@ globalThis.DragonAyumi = {
       if(!dirty && canSave())void load();
     };
     el('closeAyumi').onclick=()=>dialog.close();
-    el('ayumiNew').onclick=()=>{if(loading||!discard())return;draft=fresh();dirty=false;render();message('目標と、できそうな一歩を書いてみましょう。');el('ayumiName').focus();};
+    el('ayumiNew').onclick=()=>{if(loading||!discard())return;draft=fresh();dirty=false;render();renderList();el('ayumiPicker').open=false;message('目標と、できそうな一歩を書いてみましょう。');el('ayumiName').focus();};
     el('ayumiReload').onclick=load;
+    el('ayumiArchive').onclick=()=>{if(loading||!draft?.version)return;draft.archived=!draft.archived;changed();message(draft.archived?'保管への変更は未保存です。「保存」で一覧を整理できます。':'取り組み中への変更は未保存です。「保存」で記録できます。');};
     ['ayumiName','ayumiDue','ayumiInsight'].forEach(id=>{el(id).oninput=changed;});
     el('ayumiAdd').onclick=()=>{
       if(draft.items.length>=100){message('項目は100件までです。');return;}
@@ -277,6 +291,6 @@ globalThis.DragonAyumi = {
       catch(error){message(error.message);}
     };
     window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
-    return {reset(){generation++;planner?.reset();projects=[];draft=null;dirty=false;loading=false;dialog.close();el('ayumiFields').disabled=false;el('ayumiList').replaceChildren();el('ayumiItems').replaceChildren();el('ayumiTrashList').replaceChildren();el('ayumiInsightList').replaceChildren();['ayumiName','ayumiDue','ayumiInsight'].forEach(id=>{el(id).value='';});saveState();message('');}};
+    return {reset(){generation++;planner?.reset();projects=[];draft=null;dirty=false;loading=false;dialog.close();el('ayumiFields').disabled=false;el('ayumiList').replaceChildren();el('ayumiArchivedList').replaceChildren();el('ayumiPicker').open=false;el('ayumiCurrent').textContent='目標を選ぶ';el('ayumiArchivedCount').textContent='保管した目標（0件）';el('ayumiArchiveHint').textContent='';el('ayumiItems').replaceChildren();el('ayumiTrashList').replaceChildren();el('ayumiInsightList').replaceChildren();['ayumiName','ayumiDue','ayumiInsight'].forEach(id=>{el(id).value='';});saveState();message('');}};
   }
 };
