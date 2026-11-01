@@ -166,8 +166,21 @@
 #ayumiFocus:focus {outline:2px solid #b1dfc9;outline-offset:2px;}
 #ayumiChecklistFold,#ayumiRecordsFold {margin:14px 0;}
 #ayumiFields .ayumi-overview {margin:0;padding:12px;}
-#ayumiFields .ayumi-overview h3:not(#projectOverviewTitle) {display:none;}
+#ayumiFields .ayumi-overview h3 {display:block;}
 #projectOverviewTitle {font-size:20px;margin-bottom:6px;}
 #projectOverviewDue {margin:6px 0;}
 #ayumiFocus~.achievement-card {margin:12px 0;}
 @media(max-width:520px){.ayumi-focus-card {padding:14px;}.ayumi-focus-actions {display:grid;grid-template-columns:1fr;width:100%;}.ayumi-focus-actions button {width:100%;white-space:normal;}#ayumiList {display:block;}#ayumiList button {white-space:normal;max-width:100%;}}
+
+.ayumi-journey {margin:12px 0;overflow-wrap:anywhere;min-width:0;}
+.ayumi-journey details:not(#ayumiChecklistFold):not(#ayumiChecklistFold *) {margin:12px 0;border:1px solid #52675a;border-radius:10px;padding:10px;}
+.ayumi-journey summary:not(#ayumiChecklistFold):not(#ayumiChecklistFold *) {cursor:pointer;min-height:44px;line-height:1.6;}
+.ayumi-journey button:not(#ayumiChecklistFold):not(#ayumiChecklistFold *) {min-height:44px;white-space:normal;margin:6px 0;max-width:100%;}
+#ayumiFields .ayumi-journey label:not(#ayumiChecklistFold):not(#ayumiChecklistFold *) {display:block;margin:10px 0;}
+#ayumiFields .ayumi-journey input:not(#ayumiChecklistFold):not(#ayumiChecklistFold *),#ayumiFields .ayumi-journey textarea:not(#ayumiChecklistFold):not(#ayumiChecklistFold *),.ayumi-journey select:not(#ayumiChecklistFold):not(#ayumiChecklistFold *) {box-sizing:border-box;max-width:100%;width:100%;min-width:0;font:inherit;font-size:16px;min-height:44px;color:#eee;background:#202623;border:1px solid #64766e;border-radius:6px;padding:8px;}
+#ayumiFields .ayumi-journey input:not(#ayumiChecklistFold):not(#ayumiChecklistFold *)[type=checkbox] {width:22px;min-height:22px;height:22px;margin-right:8px;vertical-align:middle;}
+.journey-weekdays {display:flex;flex-wrap:wrap;gap:6px;}.journey-weekdays p{flex-basis:100%;}
+#ayumiFields .journey-weekdays label{min-width:52px;display:flex;align-items:center;}
+#journeyNextReview{border-left:3px solid #b1dfc9;padding-left:12px;}
+.ayumi-journey :focus-visible{outline:3px solid #e5d79b;outline-offset:2px;}
+#ayumiGoalSummary {margin:12px 0;overflow-wrap:anywhere;min-width:0;}
