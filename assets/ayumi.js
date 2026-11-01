@@ -11,7 +11,7 @@ globalThis.DragonAyumi = {
       const text = String(item.text || '').trim();
       if (!text || text.length > 300 || typeof item.id !== 'string' || !item.id || item.id.length > 80 || ids.has(item.id) || typeof item.done !== 'boolean') throw new Error('各項目を1〜300文字で入力してください。');
       ids.add(item.id);
-      return {id:item.id, text, done:item.done, ...this.weekFields(item),...this.dailyFields(item),...this.itemDueFields(item)};
+      return {id:item.id, text, done:item.done, ...this.weekFields(item),...this.dailyFields(item),...this.itemDueFields(item),...this.scheduleFields(item)};
     });
     const insight = String(value.insight || '').trim();
     if (insight.length > 500) throw new Error('今日の気づきは500文字までです。');
@@ -21,7 +21,7 @@ globalThis.DragonAyumi = {
       const item=entry.item;
       if(!item || typeof item.id!=='string' || !item.id || item.id.length>80 || ids.has(item.id) || typeof item.text!=='string' || item.text.length>300 || typeof item.done!=='boolean' || !Number.isInteger(entry.index) || entry.index<0 || entry.index>99 || !this.validDate(entry.deleted_on))throw new Error('削除した項目の形式を確認してください。');
       ids.add(item.id);
-      return {item:{id:item.id,text:item.text,done:item.done,...this.weekFields(item),...this.dailyFields(item),...this.itemDueFields(item)},index:entry.index,deleted_on:entry.deleted_on};
+      return {item:{id:item.id,text:item.text,done:item.done,...this.weekFields(item),...this.dailyFields(item),...this.itemDueFields(item),...this.scheduleFields(item)},index:entry.index,deleted_on:entry.deleted_on};
     });
     if([...items,...trash.map(e=>e.item)].reduce((n,i)=>n+(i.daily?.checks.length||0),0)>5000)throw new Error('日別の記録は削除した項目を含め5,000件までです。');
     const insight_history=value.insight_history||[];
@@ -36,6 +36,14 @@ globalThis.DragonAyumi = {
     if(value.deleted_goal!==undefined&&typeof value.deleted_goal!=='boolean')throw new Error('ごみ箱の状態を確認してください。');
     if(value.deleted_goal&&!value.archived)throw new Error('ごみ箱の目標は取り組み中にできません。');
     return {deleted_goal:value.deleted_goal===true,achieved_on:value.achieved_on||null,title, due_date, items, insight, deleted_items:trash, insight_history:history, archived:value.archived??false};
+  },
+  scheduleFields(unit){
+    if(unit.scheduled_on===undefined)return {};
+    if(!this.validDate(unit.scheduled_on))throw new Error('取り組む日の日付を確認してください。');
+    return {scheduled_on:unit.scheduled_on};
+  },
+  dayEntries(items,date){
+    return items.flatMap(item=>this.units([item]).filter(unit=>item.daily?unit.date===date:unit.scheduled_on===date).map(unit=>({item,unit})));
   },
   itemDueFields(item){
     if(item.due_date===undefined||item.due_date===null||item.due_date==='')return {};
@@ -53,7 +61,7 @@ globalThis.DragonAyumi = {
     let previous='';
     const weeks=item.weeks.map(w=>{
       if(!this.validDate(w.start)||typeof w.done!=='boolean'||(previous&&w.start<this.addDays(previous,7)))throw new Error('週の開始日を確認してください。');
-      previous=w.start;return {start:w.start,done:w.done};
+      previous=w.start;return {start:w.start,done:w.done,...this.scheduleFields(w)};
     });
     return {weeks};
   },
@@ -130,6 +138,7 @@ globalThis.DragonAyumi = {
   async save(db, owner, project) {
     const payload = this.normalize(project);
     payload.v2_revision=(project.v2_revision||0)+1;payload.trash_revision=(project.trash_revision||0)+1;
+    payload.schedule_revision=(project.schedule_revision||0)+1;
     if(project.daily_revision||[...payload.items,...payload.deleted_items.map(e=>e.item)].some(i=>i.daily))payload.daily_revision=(project.daily_revision||0)+1;
     await this.user(db, owner);
     let query = db.from('ayumi_projects');
@@ -237,7 +246,7 @@ globalThis.DragonAyumi = {
     }});
     function renderDay(){
       const today=DragonAyumi.dailyToday();
-      const dates=[...new Set(draft.items.flatMap(i=>i.daily?DragonAyumi.units([i]).map(c=>c.date):[]))].sort();
+      const dates=[...new Set(draft.items.flatMap(i=>DragonAyumi.units([i]).map(c=>i.daily?c.date:c.scheduled_on).filter(Boolean)))].sort();
       const earliest=dates[0]&&dates[0]<today?dates[0]:today,latest=dates.at(-1)&&dates.at(-1)>today?dates.at(-1):today;
       if(selectedDay<earliest||selectedDay>latest)selectedDay=today;
       saveState();
@@ -246,20 +255,20 @@ globalThis.DragonAyumi = {
       el('compactToday').disabled=selectedDay===today;
       el('ayumiDayHeading').textContent=selectedDay.slice(5).replace('-','/')+(selectedDay===today?' 今日やること':selectedDay>today?' これからの予定':' の記録');
       const container=el('ayumiDayActions');container.replaceChildren();let total=0,done=0,missed=0;
-      for(const item of draft.items){
-        const unit=item.daily?DragonAyumi.units([item]).find(c=>c.date===selectedDay):null;if(!unit)continue;
+      for(const {item,unit} of DragonAyumi.dayEntries(draft.items,selectedDay)){
         total++;if(unit.done)done++;if(unit.missed)missed++;
         const row=document.createElement('div');row.className='simple-check-row';
-        const title=document.createElement('span');title.textContent=item.text||'新しい一歩';
+        const title=document.createElement('span');title.textContent=(item.text||'新しい一歩')+(unit.start?'（'+unit.start+'の週）':'');
         const label=document.createElement('label');label.className='simple-check-label';
         const check=document.createElement('input');check.type='checkbox';check.checked=unit.done;check.disabled=selectedDay>today;check.setAttribute('aria-label',item.text+'をできた');
-        check.onchange=()=>{unit.done=check.checked;unit.missed=false;changed();renderItems();if(unit.done)sparkle();};
+        check.onchange=()=>{unit.done=check.checked;if(item.daily)unit.missed=false;changed();renderItems();if(unit.done)sparkle();};
         title.classList.toggle('simple-done',unit.done);label.append(check,title);
         const rest=document.createElement('button');rest.type='button';rest.className='plain-button simple-rest';rest.textContent=unit.missed?'お休みを取消':selectedDay===today?'今日はお休み':'お休みにする';rest.setAttribute('aria-label',item.text+'：'+rest.textContent);rest.disabled=selectedDay>today;
-        rest.onclick=()=>{unit.missed=!unit.missed;unit.done=false;changed();renderItems();};
+        if(!item.daily){rest.textContent='この日の予定から外す';rest.setAttribute('aria-label',item.text+'：この日の予定から外す');}
+        rest.onclick=()=>{if(item.daily){unit.missed=!unit.missed;unit.done=false;}else delete unit.scheduled_on;changed();renderItems();};
         row.classList.toggle('simple-resting',unit.missed);row.append(label,rest);container.append(row);
       }
-      el('ayumiDayCount').textContent=total?(selectedDay>today?'この日になったら記録できます。':`${total}件中${done+missed}件を記録 · できた ${done}・できなかった ${missed}`):'この日の行動はありません。「目標・行動を編集」で設定できます。';
+      el('ayumiDayCount').textContent=total?(selectedDay>today?'この日になったら記録できます。':`${total}件中${done+missed}件を記録 · できた ${done}・できなかった ${missed}`):'この日の行動はありません。全体の項目で「今日やる」を選ぶと、ここに表示されます。';
     }
     function progress() {
       const overall=draft.items.filter(i=>!i.daily);
@@ -273,7 +282,7 @@ globalThis.DragonAyumi = {
       overviewTitle.textContent=dailyOnly?'毎日の歩み':'目標全体の進み具合';
       el('ayumiCount').textContent=p.total?`${p.done} / ${p.total} 完了 · ${p.percent}%`:dailyOnly?'毎日の行動を続ける目標':'これから一歩を追加しましょう';
       el('ayumiProgress').hidden=!p.total;el('ayumiProgress').setAttribute('aria-label','全体の作業の完了率');
-      jumpToday.hidden=!draft.items.some(i=>i.daily);
+      jumpToday.hidden=!DragonAyumi.dayEntries(draft.items,DragonAyumi.dailyToday()).length;
       overallList.replaceChildren();
       for(const item of overall){
         const units=item.weeks?.length?item.weeks:[item];
@@ -290,7 +299,10 @@ globalThis.DragonAyumi = {
           const applyDue=()=>{if(dueInput.value&&!DragonAyumi.validDate(dueInput.value)){message('項目の期限の日付を確認してください。');return;}item.due_date=dueInput.value||null;dueSummary.textContent=DragonAyumi.itemDueLabel(item.due_date);changed();};
           dueInput.onchange=applyDue;dueLabel.append(dueInput);
           const clearDue=document.createElement('button');clearDue.type='button';clearDue.className='plain-button';clearDue.textContent='期限を外す';clearDue.onclick=()=>{dueInput.value='';applyDue();};
-          dueEditor.append(dueSummary,dueLabel,clearDue);row.append(checkLabel,dueEditor);overallList.append(row);
+          const todayButton=document.createElement('button');todayButton.type='button';todayButton.className='plain-button project-today';
+          const selected=unit.scheduled_on===DragonAyumi.dailyToday();todayButton.textContent=selected?'今日の予定から外す':'今日やる';todayButton.setAttribute('aria-pressed',String(selected));todayButton.setAttribute('aria-label',item.text+(unit.start?' '+unit.start:'')+'：'+todayButton.textContent);
+          todayButton.onclick=()=>{if(selected)delete unit.scheduled_on;else unit.scheduled_on=DragonAyumi.dailyToday();selectedDay=DragonAyumi.dailyToday();changed();renderItems();message(selected?'今日の予定から外しました。「変更を保存」で記録できます。':'「今日やること」に追加しました。「変更を保存」で記録できます。');};
+          dueEditor.append(dueSummary,dueLabel,clearDue);row.append(checkLabel,todayButton,dueEditor);overallList.append(row);
         }
       }
       if(!overall.length)overallList.textContent=draft.items.some(i=>i.daily)?'下の「今日やること」で記録できます。全体で達成したい作業も「その他」から追加できます。':'全体で達成したい作業を「その他」から追加できます。';
@@ -310,7 +322,7 @@ globalThis.DragonAyumi = {
         const row=document.createElement('div'); row.className='ayumi-item';
         const check=document.createElement('input'); check.type='checkbox'; check.checked=item.done; check.setAttribute('aria-label',`項目${index+1}の完了`);
         check.hidden=!!item.weeks?.length||!!item.daily;
-        check.onchange=()=>{item.done=check.checked;changed();progress();updateSummary();};
+        check.onchange=()=>{item.done=check.checked;changed();progress();renderDay();updateSummary();};
         const text=document.createElement('input'); text.type='text'; text.maxLength=300; text.value=item.text; text.placeholder='小さな一歩を書いてみましょう'; text.setAttribute('aria-label',`項目${index+1}`);
         text.oninput=()=>{item.text=text.value;changed();updateSummary();progress();};
         const remove=document.createElement('button');remove.type='button';remove.textContent='削除';remove.className='plain-button';remove.setAttribute('aria-label',`項目${index+1}を削除`);

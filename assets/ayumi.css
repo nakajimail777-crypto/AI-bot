@@ -147,3 +147,6 @@
 .vault-goal-row{border:1px solid #52675a;border-radius:12px;padding:14px;margin:10px 0;display:grid;gap:10px;overflow-wrap:anywhere}.vault-goal-row small{color:#b3beb7}.vault-goal-actions{display:flex;flex-wrap:wrap;gap:8px}.vault-goal-actions button{min-height:44px}.vault-goal-actions button:last-child{margin-left:0}
 
 .active-goal-row{border-bottom:1px solid #52675a;padding:10px 0}.active-goal-row details{margin:6px 0}.active-goal-row summary{min-height:44px;cursor:pointer}.active-goal-row details button{min-height:44px;margin:4px}
+
+.project-today {flex:0 0 auto;min-height:44px;}
+@media(max-width:520px){.project-today {margin-left:34px;}}
