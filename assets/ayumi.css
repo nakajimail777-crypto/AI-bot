@@ -150,3 +150,24 @@
 
 .project-today {flex:0 0 auto;min-height:44px;}
 @media(max-width:520px){.project-today {margin-left:34px;}}
+
+.ayumi-focus-card {border:1px solid #9ccdb4;background:#20382b;border-radius:14px;padding:18px;margin:12px 0;overflow-wrap:anywhere;}
+.ayumi-focus-card h3 {margin:0 0 8px;font-size:20px;}
+.ayumi-focus-title {font-size:20px;font-weight:650;line-height:1.55;margin:14px 0;}
+.ayumi-focus-actions {display:flex;flex-wrap:wrap;gap:8px;}
+.ayumi-focus-card button,.ayumi-focus-choice summary {min-height:44px;}
+.ayumi-focus-primary {background:#b1dfc9!important;color:#13281d!important;font-weight:700;}
+.ayumi-focus-help {font-size:13px;color:#c4d7cc;}
+.ayumi-focus-choice {margin-top:12px;}
+.ayumi-focus-choice summary {cursor:pointer;display:flex;align-items:center;}
+.ayumi-focus-choice select {width:100%;min-width:0;min-height:44px;font:inherit;font-size:16px;background:#202623;color:#eee;border:1px solid #64766e;border-radius:8px;}
+#ayumiFields .ayumi-focus-choice label {display:block;margin:8px 0;}
+#ayumiFocus :focus-visible {outline:3px solid #e5d79b;outline-offset:3px;}
+#ayumiFocus:focus {outline:2px solid #b1dfc9;outline-offset:2px;}
+#ayumiChecklistFold,#ayumiRecordsFold {margin:14px 0;}
+#ayumiFields .ayumi-overview {margin:0;padding:12px;}
+#ayumiFields .ayumi-overview h3:not(#projectOverviewTitle) {display:none;}
+#projectOverviewTitle {font-size:20px;margin-bottom:6px;}
+#projectOverviewDue {margin:6px 0;}
+#ayumiFocus~.achievement-card {margin:12px 0;}
+@media(max-width:520px){.ayumi-focus-card {padding:14px;}.ayumi-focus-actions {display:grid;grid-template-columns:1fr;width:100%;}.ayumi-focus-actions button {width:100%;white-space:normal;}#ayumiList {display:block;}#ayumiList button {white-space:normal;max-width:100%;}}
