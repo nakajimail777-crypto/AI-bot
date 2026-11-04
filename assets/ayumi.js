@@ -124,6 +124,11 @@ globalThis.DragonAyumi = {
     for(let date=start;date<=end;date=this.addDays(date,1))if(!records.has(date))records.set(date,{date,done:false});
     return this.dailyFields({daily:{start,end,timezone:'Asia/Tokyo',checks:[...records.values()].sort((a,b)=>a.date.localeCompare(b.date))}}).daily;
   },
+  deadlineLabel(due,today=this.dailyToday()){
+    if(!this.validDate(due)||!this.validDate(today))return '';
+    const days=Math.round((Date.parse(due)-Date.parse(today))/86400000);
+    return days>0?'あと'+days+'日':days===0?'今日が期限':'期限から'+Math.abs(days)+'日';
+  },
   dailyToday(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());},
   appendPlan(project,plan){
     if(project.items.length+plan.items.length>100)throw new Error('項目は100件までです。');
@@ -229,6 +234,7 @@ globalThis.DragonAyumi = {
     const timeline=document.createElement('div');timeline.id='ayumiRecordBreakdown';overview.append(timeline,archive);
     const goalTitle=document.createElement('h3');goalTitle.id='projectOverviewTitle';overview.prepend(goalTitle);
     const goalDue=document.createElement('p');goalDue.id='projectOverviewDue';overview.append(goalDue);
+    const goalDueText=document.createElement('span'),deadlineBadge=document.createElement('span');deadlineBadge.id='ayumiDeadlineBadge';deadlineBadge.className='ayumi-deadline-badge';deadlineBadge.hidden=true;goalDue.append(goalDueText,deadlineBadge);
     const jumpToday=document.createElement('button');jumpToday.type='button';jumpToday.className='plain-button';jumpToday.textContent='今日やることへ ↓';jumpToday.id='jumpToday';overview.append(jumpToday);
     todaySection.tabIndex=-1;
     jumpToday.onclick=()=>{selectedDay=DragonAyumi.dailyToday();renderDay();todaySection.scrollIntoView({block:'start'});todaySection.focus({preventScroll:true});};
@@ -282,7 +288,7 @@ globalThis.DragonAyumi = {
     jumpToday.onclick=openRecords;
     const focusUI=globalThis.DragonAyumiFocusUI.mount({host:focusHost,
       getState:()=>({draft,saved:projects.find(p=>p.id===draft?.id),dirty,loading,canSave:!!canSave()}),
-      notice:message,onDateChange(){journeyUI?.refresh();},openRecords,openChecklist(){checklistFold.open=true;checklistFold.querySelector('summary').focus();},
+      notice:message,onDateChange(){renderDeadline();journeyUI?.refresh();},openRecords,openChecklist(){checklistFold.open=true;checklistFold.querySelector('summary').focus();},
       openEditor(ai){journeyUI.open(ai);},
       async act(action,id,date){
         if(loading||!canSave())return false;
@@ -350,11 +356,16 @@ globalThis.DragonAyumi = {
       el('ayumiDayCount').textContent=total?(selectedDay>today?'この日になったら記録できます。':`${total}件中${done+missed}件を記録 · できた ${done}・できなかった ${missed}`):'この日の行動はありません。全体の項目で「今日やる」を選ぶと、ここに表示されます。';
       focusUI.render();
     }
+    function renderDeadline(){
+      const due=el('ayumiDue').value;
+      goalDueText.textContent=due?'期限：'+due.replaceAll('-','/'):'期限は自由に設定できます';
+      deadlineBadge.textContent=DragonAyumi.deadlineLabel(due);deadlineBadge.hidden=!deadlineBadge.textContent;
+    }
     function progress() {
       const overall=draft.items.filter(i=>!i.daily);
       const p=DragonAyumi.overallProgress(draft.items);
       el('projectOverviewTitle').textContent=el('ayumiName').value.trim()||'新しい目標';
-      el('projectOverviewDue').textContent=el('ayumiDue').value?'期限：'+el('ayumiDue').value.replaceAll('-','/'):'期限は自由に設定できます';
+      renderDeadline();
       const confirmed=DragonAyumi.confirmedAchievement(draft,projects.find(project=>project.id===draft.id));
       achievement.replaceChildren();achievement.hidden=!confirmed;
       if(!achievement.hidden){const h=document.createElement('h3');h.textContent='🐉 目標達成、おめでとう！';const name=document.createElement('p');name.textContent=confirmed.title;const date=document.createElement('p');date.textContent='達成日：'+confirmed.achieved_on.replaceAll('-','/');const note=document.createElement('p');note.textContent=confirmed.insight||'ひとつずつ進めた歩みが、ここに残りました。';achievement.append(h,name,date,note);}
@@ -632,7 +643,7 @@ globalThis.DragonAyumi = {
     }
     el('openAyumi').onclick=()=>{
       if(!draft){draft=fresh();render();}
-      el('ayumiPastDate').max=DragonAyumi.dailyToday();renderDay();
+      el('ayumiPastDate').max=DragonAyumi.dailyToday();renderDay();renderDeadline();
       if(!draft.title){other.open=true;edit.open=true;}
       dialog.showModal();
       if(!dirty && !journeyUI?.hasEdits() && canSave())void load();

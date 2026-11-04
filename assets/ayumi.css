@@ -184,3 +184,7 @@
 #journeyNextReview{border-left:3px solid #b1dfc9;padding-left:12px;}
 .ayumi-journey :focus-visible{outline:3px solid #e5d79b;outline-offset:2px;}
 #ayumiGoalSummary {margin:12px 0;overflow-wrap:anywhere;min-width:0;}
+
+#projectOverviewDue {display:flex;align-items:center;flex-wrap:wrap;gap:8px;}
+.ayumi-deadline-badge {display:inline-block;background:#b1dfc9;color:#13281d;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:700;white-space:nowrap;}
+.ayumi-deadline-badge[hidden] {display:none;}
