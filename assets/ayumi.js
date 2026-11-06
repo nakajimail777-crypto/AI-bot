@@ -641,11 +641,36 @@ globalThis.DragonAyumi = {
       }catch(error){if(g===generation)message(error.message);}
       finally{if(g===generation){loading=false;el('ayumiFields').disabled=false;saveState();focusUI.render();journeyUI?.refresh();}}
     }
+    const privateLink=document.createElement('a');
+    privateLink.className='ayumi-stepbook-link';
+    privateLink.textContent='龍秘術Stepbookの目標画面を開く ↗';
+    privateLink.setAttribute('aria-label','龍秘術Stepbookの目標画面を開く（新しいタブ）');
+    privateLink.target='_blank';
+    privateLink.rel='noopener noreferrer';
+    let linkRequest=0;
+    async function refreshPrivateLink(){
+      const request=++linkRequest;
+      privateLink.remove();
+      const {session}=context();
+      if(!session?.access_token || session.user?.is_anonymous)return;
+      try{
+        const response=await fetch('/api/config?view=stepbook',{
+          headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'
+        });
+        if(!response.ok)return;
+        const {url}=await response.json();
+        if(!url || request!==linkRequest || !dialog.open || context().session?.user?.id!==session.user.id)return;
+        privateLink.href=url;
+        overview.after(privateLink);
+      }catch{/* If authentication cannot be verified, keep the link hidden. */}
+    }
+    dialog.addEventListener('close',()=>{linkRequest++;privateLink.remove();privateLink.removeAttribute('href');});
     el('openAyumi').onclick=()=>{
       if(!draft){draft=fresh();render();}
       el('ayumiPastDate').max=DragonAyumi.dailyToday();renderDay();renderDeadline();
       if(!draft.title){other.open=true;edit.open=true;}
       dialog.showModal();
+      void refreshPrivateLink();
       if(!dirty && !journeyUI?.hasEdits() && canSave())void load();
     };
     el('closeAyumi').onclick=()=>{if(loading){message('保存が終わるまでお待ちください。');return;}dialog.close();};dialog.addEventListener('cancel',e=>{if(loading)e.preventDefault();});
