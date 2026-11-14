@@ -59,3 +59,49 @@ function apiSetup(admin=false){
 test('non-admin cannot obtain global totals',async()=>{const s=apiSetup();assert.equal((await s.invoke({scope:'all'})).code,403);assert.equal(s.calls.length,1);});
 test('admin aggregate still scopes answer receipts to the authenticated user',async()=>{const s=apiSetup(true);const r=await s.invoke({scope:'all',requestIds:user});assert.equal(r.code,200);assert.equal(JSON.parse(s.calls[1].init.body).p_user_id,null);assert.match(s.calls[2].url,new RegExp('user_id=eq.'+user));});
 test('filter injection and array query parameters rejected',async()=>{for(const query of [{month:'2026-13'},{requestIds:'x)&user_id=neq.x'},{scope:['all']},{requestIds:['x']}]){const s=apiSetup();assert.equal((await s.invoke(query)).code,400);assert.equal(s.calls.length,1);}});
+
+const openaiModel='gpt-5.4-mini-2026-03-17';
+const openaiUsage={input_tokens:1000000,input_tokens_details:{cached_tokens:200000},output_tokens:500000,output_tokens_details:{reasoning_tokens:300000},total_tokens:1500000};
+test('OpenAI output already includes reasoning and cached input is charged once',()=>{
+ const u=calculateUsage(openaiModel,{usage:openaiUsage},{billingMode:'paid'});
+ assert.equal(u.provider,'openai');assert.equal(u.response,200000);assert.equal(u.thinking,300000);assert.equal(u.output,500000);assert.equal(u.total,1500000);
+ assert.equal(u.estimatedUsd,2.865);assert.equal(u.billedUsd,2.865);assert.equal(u.cached,200000);
+ assert.equal(calculateUsage(openaiModel,{usage:openaiUsage}).billedUsd,null);
+ assert.equal(calculateUsage(openaiModel,{usage:openaiUsage},{billingMode:'free'}).billedUsd,0);
+});
+test('OpenAI missing or inconsistent token counts stay unknown rather than becoming free',()=>{
+ for(const usage of [undefined,{}, {...openaiUsage,input_tokens_details:undefined}, {...openaiUsage,input_tokens:-1},
+  {...openaiUsage,output_tokens:'500000'}, {...openaiUsage,input_tokens_details:{cached_tokens:1000001}},
+  {...openaiUsage,output_tokens_details:{reasoning_tokens:500001}}, {...openaiUsage,total_tokens:1500001}]){
+  assert.equal(calculateUsage(openaiModel,{usage},{billingMode:'paid'}).estimatedUsd,null);
+ }
+ const noReasoning=calculateUsage(openaiModel,{usage:{...openaiUsage,output_tokens_details:undefined}});
+ assert.equal(noReasoning.thinking,null);assert.equal(noReasoning.response,null);assert.equal(noReasoning.estimatedUsd,2.865);
+});
+test('meter combines Gemini retrieval and OpenAI generation without persisting credentials or prompts',async()=>{
+ const writes=[];
+ const m=createMeter({env:{SUPABASE_URL:'https://db.test',SUPABASE_SECRET_KEY:'test',OPENAI_BILLING_MODE:'paid',GEMINI_BILLING_MODE:'free'},fetcher:async(url,init)=>{
+  if(url.includes('api_usage_events')){writes.push(JSON.parse(init.body));return new Response(null,{status:201});}
+  if(url.includes('openai'))return new Response(JSON.stringify({status:'completed',usage:openaiUsage}));
+  return new Response(JSON.stringify({usageMetadata:{promptTokenCount:1000}}));
+ }});
+ await m.fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent',{});
+ await m.fetch('https://api.openai.com/v1/responses',{headers:{Authorization:'Bearer PRIVATE_KEY'},body:JSON.stringify({model:openaiModel,input:'PRIVATE_PROMPT'})});
+ await m.flush();await m.flush();
+ assert.equal(writes.length,1);assert.equal(writes[0].length,2);assert.equal(writes[0][1].model,openaiModel);assert.equal(writes[0][1].category,'generation');
+ assert.equal(writes[0][1].billed_usd,2.865);assert.equal(writes[0][0].billed_usd,0);
+ assert.doesNotMatch(JSON.stringify(writes),/PRIVATE_KEY|PRIVATE_PROMPT/);
+ assert.equal(m.summary().generation.provider,'openai');assert.equal(m.summary().rag.model,'gemini-embedding-2');
+ assert.equal(m.summary().estimatedUsd,2.8652);assert.equal(m.summary().recorded,true);
+});
+test('OpenAI rejected requests without usage are zero while timeouts and successful missing metadata stay unknown',async()=>{
+ const request={body:JSON.stringify({model:openaiModel})};
+ const rejected=createMeter({fetcher:async()=>new Response('{}',{status:429})});
+ await rejected.fetch('https://api.openai.com/v1/responses',request);
+ assert.equal(rejected.events[0].outcome,'rejected');assert.equal(rejected.events[0].estimated_usd,0);
+ const missing=createMeter({fetcher:async()=>new Response('{"status":"completed"}')});
+ await missing.fetch('https://api.openai.com/v1/responses',request);assert.equal(missing.events[0].estimated_usd,null);
+ const timeout=createMeter({fetcher:async()=>{throw new DOMException('timeout','TimeoutError');}});
+ await assert.rejects(timeout.fetch('https://api.openai.com/v1/responses',request));
+ assert.equal(timeout.events[0].outcome,'unknown');assert.equal(timeout.events[0].estimated_usd,null);
+});

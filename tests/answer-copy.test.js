@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 const source=await readFile(new URL('../assets/app.js',import.meta.url),'utf8');
+const usageSource=await readFile(new URL('../assets/usage-ui.js',import.meta.url),'utf8');
 function setup({fallback=false,fail=false}={}){
  const copied=[],timers=[];
  const node=()=>({children:[],style:{},dataset:{},attrs:{},textContent:'',setAttribute(k,v){this.attrs[k]=v;},append(...items){this.children.push(...items);},replaceChildren(){this.children=[];},focus(){},select(){},setSelectionRange(){},remove(){this.removed=true;}});
  const body=node(),messages=node(),previous=node();previous.selectionStart=2;previous.selectionEnd=4;
  previous.setSelectionRange=(a,b)=>{previous.restored=[a,b];};
- const context=vm.createContext({document:{body,activeElement:previous,getSelection:()=>null,createElement:node,execCommand:()=>{if(fail)return false;copied.push(body.children.at(-1).value);return true;}},navigator:{clipboard:fallback?undefined:{writeText:async value=>copied.push(value)}},setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},messages,rows:[],olderMore:false,session:null,DragonUsage:{answer:()=>''},usageCache:new Map()});
+ const context=vm.createContext({document:{body,activeElement:previous,getSelection:()=>null,createElement:node,execCommand:()=>{if(fail)return false;copied.push(body.children.at(-1).value);return true;}},window:{},navigator:{clipboard:fallback?undefined:{writeText:async value=>copied.push(value)}},setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},messages,rows:[],olderMore:false,session:null,usageCache:new Map()});
+ vm.runInContext(usageSource,context);context.DragonUsage=context.window.DragonUsage;
  vm.runInContext(source.slice(source.indexOf('async function copyAnswerText'),source.indexOf('function renderHistory')),context);
  return {context,copied,timers,body,messages,previous};
 }

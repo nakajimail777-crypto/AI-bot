@@ -1,5 +1,20 @@
 # スピリットドラゴンAI：DB接続版
 
+## 2026-11-15：WebのAI切り替え
+
+本番向けの作業ブランチで実装・検証中。下の初期導入記録とは別の変更で、まだ本番へ公開していない。
+
+- 「会話の管理」→「使うAI」で Gemini / OpenAI を選ぶ。既定はGemini、選択は利用者ごとにこの端末へ保存する。
+- 次の返答から選択を反映し、既存の会話履歴・モード・添付・歩みのプラン作成を引き継ぐ。送信中は切り替えない。
+- 返答の利用記録からAI名を表示し、「自分に戻る」のローカル定型文は「定型の案内」と区別する。ゲストの過去の返答には接続先の保存情報がないため、AI名を推測しない。
+- 本棚の検索・登録は `gemini-embedding-2` / 768次元を継続。LINEと管理者の学習抽出はWebの選択欄に連動しない。
+- サーバーの `OPENAI_API_KEY` で `gpt-5.4-mini-2026-03-17` Responsesを使用する。`store:false`、reasoning `low`。既存の `GEMINI_API_KEY` はそのまま保持する。
+- OpenAIキーが未設定なら選択欄に「準備中」と表示し、生成を呼ばない。キーは公開画面・リポジトリに保存しない。Vercel Productionへの登録先確認は公開前に行う。
+- OpenAIの保存には既存の `chat_save_turn_with_usage` が必要。未導入時は旧保存RPCへ代替せず、Geminiを選ぶ案内を返す。
+- 使用量は実際の各HTTP呼出しを記録。キャッシュ割引と推論トークンを重複なく計算し、使用量が不明な場合は金額を確定しない。`OPENAI_BILLING_MODE` は必要な場合だけ `paid` / `free` を明示し、既定の `unknown` は請求額を断定しない。
+
+検証コマンド: `node --test --test-concurrency=1 tests/*.test.js`。UIの模擬確認は `node scripts/preview-usage.mjs`（実API・DB接続なし、公開対象外）。元プロジェクトから不足していたゲスト/LINEのSQLを変更せず復元したが、本作業では本番DBへ適用しない。今回の実装・実API確認・公開状況は `TEMP-openai-migration-ledger.md` に記録する。
+
 ## 実装済み・公開前
 
 GitHub `nakajimail777-crypto/AI-bot` の `main`、コミット `97e72faa078df3d3394c5237027b832349871d6b` を基に作成。

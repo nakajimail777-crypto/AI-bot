@@ -5,6 +5,12 @@ document.addEventListener('click', event => {
  if (explorationMenu?.open && !explorationMenu.contains(event.target)) explorationMenu.open = false;
 });
 let db, session = null, activeId = null, busy = false, ready = false, epoch = 0, pending = null, rows = [], chats = [];
+let planBusy=false;
+const aiProvider=DragonAIProvider.mount({select:$('aiProvider'),hint:$('aiProviderHint'),userId:()=>session?.user?.id,
+  onChange(){pending=null;trialPending=null;rememberDraft();controls();status(aiProvider.label()+'に切り替えました。次の返答から使います。');document.dispatchEvent(new Event('dragon-ai-provider-change'));}});
+globalThis.getDragonAIProvider=()=>aiProvider.get();
+globalThis.getDragonAIProviderState=()=>({id:aiProvider.get(),label:aiProvider.label(),available:aiProvider.available()});
+document.addEventListener('dragon-ai-plan-busy',event=>{planBusy=event.detail===true;controls();});
 // Reflection uses the same authenticated client; it never enters chat requests automatically.
 globalThis.getDragonReflectionContext=()=>({db,userId:session?.user?.is_anonymous?null:session?.user?.id||null});
 let historyOffset = 0, historyMore = false, olderMore = false;
@@ -37,20 +43,29 @@ async function readTrial(version){
 }
 async function sendTrial(modeStart=false){
  if(!trialReady||trialRemaining<=0){$('authDialog').showModal();return;}
- const sentDraft=input.value,text=modeStart?'':sentDraft.trim(),version=epoch,replyVersion=++responseVersion;
+ const sentDraft=input.value,text=modeStart?'':sentDraft.trim(),version=epoch,replyVersion=++responseVersion,provider=aiProvider.get();
  const mindMap=modeStart?null:(globalThis.getDragonMindMapContext?.(text)||null),mapKey=JSON.stringify(mindMap);
  if(text.length>4000)throw new Error('メッセージは4,000文字以内で入力してください。');
- if(!trialPending||trialPending.text!==text||trialPending.mode!==seikanMode||trialPending.blindSpot!==blindSpot||trialPending.emotionFocus!==emotionFocus||trialPending.encouragement!==encouragement||trialPending.returnPath!==returnPath||trialPending.skyGazing!==skyGazing||trialPending.selfReturn!==selfReturn||trialPending.deepExploration!==deepExploration||trialPending.patternExploration!==patternExploration||trialPending.directionExploration!==directionExploration||trialPending.modeStart!==modeStart||trialPending.mapKey!==mapKey)trialPending={text,mode:seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,mapKey,id:crypto.randomUUID()};
- status('返答を考えています…');replyWaiting(true);
- const response=await fetch('/api/guest-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,requestId:trialPending.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,mindMap}),signal:AbortSignal.timeout(85000)});
+ if(!trialPending||trialPending.provider!==provider||trialPending.text!==text||trialPending.mode!==seikanMode||trialPending.blindSpot!==blindSpot||trialPending.emotionFocus!==emotionFocus||trialPending.encouragement!==encouragement||trialPending.returnPath!==returnPath||trialPending.skyGazing!==skyGazing||trialPending.selfReturn!==selfReturn||trialPending.deepExploration!==deepExploration||trialPending.patternExploration!==patternExploration||trialPending.directionExploration!==directionExploration||trialPending.modeStart!==modeStart||trialPending.mapKey!==mapKey)trialPending={provider,text,mode:seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,mapKey,id:crypto.randomUUID()};
+ status(aiProvider.label()+'が返答を考えています…');replyWaiting(true);
+ const response=await fetch('/api/guest-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,message:text,requestId:trialPending.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,mindMap}),signal:AbortSignal.timeout(85000)});
  const data=await response.json();
  if(version!==epoch||session||replyVersion!==responseVersion)return;
  if(!response.ok){
   if(['TRIAL_LIMIT','TRIAL_ATTEMPTS','TRIAL_NETWORK_LIMIT'].includes(data.code)){trialRemaining=0;$('authDialog').showModal();}
   throw new Error(data.error||'送信できませんでした。入力は残っています。');
  }
+ const receipt={...data.usage,provider:data.usage?.provider||data.provider,model:data.usage?.model||data.model,replySource:data.replySource||data.usage?.replySource};
+ if(data.usage||data.provider||data.replySource)usageCache.set(data.requestId||trialPending.id,receipt);
  encouragement=false;blindSpot=false;returnPath=false;trialRemaining=data.remaining;if(!modeStart&&input.value===sentDraft)input.value='';trialPending=null;
  await loadTrial();
+ if(version!==epoch||session||replyVersion!==responseVersion)return;
+ // The guest history has no request IDs. Only associate a freshly finished
+ // response with its quota-defined position when its exact text also matches.
+ const completedIndex=(5-data.remaining)*2-1,completedRow=rows[completedIndex];
+ if(data.replySource!=='cached'&&Number.isInteger(data.remaining)&&data.remaining>=0&&data.remaining<5&&completedRow?.role==='assistant'&&completedRow.content===data.reply&&(data.usage||data.provider||data.replySource)){
+  completedRow.usage=receipt;renderMessages();
+ }
  $('conversation').scrollTop=$('conversation').scrollHeight;
  status(trialRemaining>0?'あと'+trialRemaining+'回お試しいただけます。':'5往復のお試しが終わりました。ログインすると新しい会話を始められます。');
 }
@@ -214,7 +229,8 @@ function controls() {
   $('seikanMode').setAttribute('aria-pressed',String(seikanMode));
   $('seikanMode').textContent = seikanMode?'静観モード：ON':'静観モード：OFF';
   $('seikanHint').hidden = !seikanMode;
-  send.disabled = busy || pdfReading || !ready || (!session&&(!trialReady||trialRemaining<=0)) || (!input.value.trim() && !attachedPdf) || Date.now() < cooldownUntil;
+  aiProvider.setBusy(busy||planBusy||!ready);
+  send.disabled = busy || planBusy || !aiProvider.available() || pdfReading || !ready || (!session&&(!trialReady||trialRemaining<=0)) || (!input.value.trim() && !attachedPdf) || Date.now() < cooldownUntil;
   $('attachPdf').disabled = busy || pdfReading || !ready || !session;
   $('removePdf').disabled = busy;
   send.title = Date.now() < cooldownUntil ? `あと約${Math.ceil((cooldownUntil-Date.now())/1000)}秒で送信できます` : '';
@@ -236,8 +252,11 @@ function controls() {
   $('deleteChat').disabled = busy || !ready;
   $('deleteAllChats').hidden = !session;
   $('deleteAllChats').disabled = busy || !ready;
-  $('manageChats').hidden = !session;
-  $('manageChats').disabled = busy || !ready;
+  $('manageChats').hidden = false;
+  $('manageChats').disabled = busy || planBusy || !ready;
+  $('managedSavedChats').hidden = !session;
+  $('manageGuestHint').hidden = !!session;
+  $('manageExportPdf').disabled = busy || !ready || !session;
   $('showRememberedChats').disabled = busy || !ready || !session || session.user.is_anonymous;
   $('logout').disabled = busy;
   document.querySelectorAll('.history-item,.older,.archived-chat .plain-button').forEach(button => button.disabled = busy);
@@ -245,7 +264,7 @@ function controls() {
 }
 function rememberDraft() {
   if (!session) return;
-  try { sessionStorage.setItem(storageKey(),JSON.stringify({ activeId, text:input.value, pending:pending?{...pending,mapKey:undefined}:null, cooldownUntil, seikanMode, blindSpot, emotionFocus, encouragement, returnPath, skyGazing, selfReturn, deepExploration, patternExploration, directionExploration, selectedMemory })); } catch {}
+  try { sessionStorage.setItem(storageKey(),JSON.stringify({ activeId, provider:aiProvider.get(), text:input.value, pending:pending?{...pending,mapKey:undefined}:null, cooldownUntil, seikanMode, blindSpot, emotionFocus, encouragement, returnPath, skyGazing, selfReturn, deepExploration, patternExploration, directionExploration, selectedMemory })); } catch {}
 }
 async function copyAnswerText(value) {
   try {
@@ -312,12 +331,13 @@ function renderMessages() {
       const wrap=document.createElement('div'); wrap.className='assistant-message';
       const badge=document.createElement('div'); badge.className='assistant-badge'; badge.textContent='✦';
       const content=document.createElement('div'); content.className='assistant-content';
+      const providerLabel=document.createElement('span');providerLabel.className='answer-provider';providerLabel.dataset.requestId=row.reply_to||'';providerLabel.textContent=DragonUsage.provider(usageCache.get(row.reply_to)||row.usage||(row.provider?{provider:row.provider,model:row.model,replySource:row.replySource}:null));providerLabel.hidden=!providerLabel.textContent;
       const detail=document.createElement('details'); detail.className='answer-usage'; detail.dataset.requestId=row.reply_to || '';
       const title=document.createElement('summary'); title.textContent='トークン数・推定料金';
       detail.hidden=!session;
       const stats=document.createElement('p'); stats.textContent=DragonUsage.answer(usageCache.get(row.reply_to));
       const actions=document.createElement('div');actions.className='answer-actions';actions.append(answerCopyButton(row.content));
-      detail.append(title,stats); content.append(text,actions,detail); wrap.append(badge,content); block.append(wrap);
+      detail.append(title,stats); content.append(providerLabel,text,actions,detail); wrap.append(badge,content); block.append(wrap);
     } else block.append(text);
     messages.append(block);
   }
@@ -361,6 +381,7 @@ async function run(action) {
 async function changeSession(next) {
   const oldId=session?.user.id, nextId=next?.user.id;
   session=next;
+  if(oldId!==nextId)aiProvider.restore();
   document.dispatchEvent(new Event('dragon-reflection-session'));
   if(oldId!==nextId){leaveSelfReturn();seikanMode=false;encouragement=false;blindSpot=false;emotionFocus=false;returnPath=false;skyGazing=false;}
   if(oldId===nextId){if(!next){ready=true;try{await loadTrial();}catch(error){status(error.message,true);}}controls();return;}
@@ -391,7 +412,7 @@ async function changeSession(next) {
         if(version!==epoch)return;
         if(data){activeId=data.id;await loadMessages();}
       }
-      if(!draft.activeId||activeId===draft.activeId){input.value=draft.text||'';pending=draft.pending||null;}
+      if(!draft.activeId||activeId===draft.activeId){input.value=draft.text||'';pending=draft.pending||null;if(pending&&(pending.provider||'gemini')!==aiProvider.get())pending=null;}
     }
     if(version!==epoch)return;
     renderHistory();
@@ -452,10 +473,10 @@ $('refreshMemories').onclick=()=>run(()=>loadMemories());
 $('moreMemories').onclick=()=>run(()=>loadMemories(true));
 
 function submitMessage(modeStart=false){
-  if(busy||pdfReading||(!modeStart&&!input.value.trim()&&!attachedPdf)||Date.now()<cooldownUntil)return;
+  if(busy||planBusy||!aiProvider.available()||pdfReading||(!modeStart&&!input.value.trim()&&!attachedPdf)||Date.now()<cooldownUntil)return;
   run(async()=>{
     if(!session){await sendTrial(modeStart);return;}
-    const sentDraft=input.value, text=modeStart?'':(sentDraft.trim() || '添付したPDFの内容を要約してください。'), version=epoch, replyVersion=++responseVersion;
+    const sentDraft=input.value, text=modeStart?'':(sentDraft.trim() || '添付したPDFの内容を要約してください。'), version=epoch, replyVersion=++responseVersion,provider=aiProvider.get();
     const mindMap=modeStart?null:(globalThis.getDragonMindMapContext?.(text)||null),mapKey=JSON.stringify(mindMap);
     const attachment=modeStart?null:attachedPdf, memoryId=modeStart?null:(selectedMemory?.id||null);
     if(attachment && `${text}\n\n［添付PDF：${attachment.name}］`.length>4000)throw new Error('PDFのファイル名を含めて4,000文字以内になるよう、質問を短くしてください。');
@@ -467,12 +488,12 @@ function submitMessage(modeStart=false){
       if(version!==epoch||replyVersion!==responseVersion)return;
       activeId=id;rememberDraft();
     }
-    if(!pending||pending.text!==text||pending.conversationId!==activeId||pending.pdfId!==attachment?.id||pending.seikanMode!==seikanMode||pending.blindSpot!==blindSpot||pending.emotionFocus!==emotionFocus||pending.encouragement!==encouragement||pending.returnPath!==returnPath||pending.skyGazing!==skyGazing||pending.selfReturn!==selfReturn||pending.deepExploration!==deepExploration||pending.patternExploration!==patternExploration||pending.directionExploration!==directionExploration||pending.modeStart!==modeStart||pending.memoryId!==memoryId||pending.mapKey!==mapKey)pending={requestId:crypto.randomUUID(),conversationId:activeId,text,pdfId:attachment?.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,memoryId,mapKey};
-    rememberDraft();status('返答を考えています…');replyWaiting(true);
+    if(!pending||pending.provider!==provider||pending.text!==text||pending.conversationId!==activeId||pending.pdfId!==attachment?.id||pending.seikanMode!==seikanMode||pending.blindSpot!==blindSpot||pending.emotionFocus!==emotionFocus||pending.encouragement!==encouragement||pending.returnPath!==returnPath||pending.skyGazing!==skyGazing||pending.selfReturn!==selfReturn||pending.deepExploration!==deepExploration||pending.patternExploration!==patternExploration||pending.directionExploration!==directionExploration||pending.modeStart!==modeStart||pending.memoryId!==memoryId||pending.mapKey!==mapKey)pending={provider,requestId:crypto.randomUUID(),conversationId:activeId,text,pdfId:attachment?.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,memoryId,mapKey};
+    rememberDraft();status(aiProvider.label()+'が返答を考えています…');replyWaiting(true);
     const {data:{session:fresh},error:authError}=await db.auth.getSession();
     if(version!==epoch||replyVersion!==responseVersion)return;
     if(authError||!fresh)throw new Error('ログインし直してください。');
-    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${fresh.access_token}`},body:JSON.stringify({message:text,conversationId:activeId,requestId:pending.requestId,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,mindMap,...(memoryId?{memoryId}:{}),...(attachment?{attachment:{name:attachment.name,mimeType:'application/pdf',data:attachment.data}}:{})}),signal:AbortSignal.timeout(85000)});
+    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${fresh.access_token}`},body:JSON.stringify({provider,message:text,conversationId:activeId,requestId:pending.requestId,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,mindMap,...(memoryId?{memoryId}:{}),...(attachment?{attachment:{name:attachment.name,mimeType:'application/pdf',data:attachment.data}}:{})}),signal:AbortSignal.timeout(85000)});
     const data=await response.json().catch(()=>({}));
     if(version!==epoch||replyVersion!==responseVersion)return;
     if(!response.ok) {
@@ -484,7 +505,7 @@ function submitMessage(modeStart=false){
     }
     if(!data.saved)throw new Error('保存を確認できませんでした。もう一度お試しください。');
     if(version!==epoch||replyVersion!==responseVersion)return;
-    if(data.usage)usageCache.set(pending.requestId,data.usage);
+    if(data.usage||data.provider||data.replySource)usageCache.set(pending.requestId,{...data.usage,provider:data.usage?.provider||data.provider,model:data.usage?.model||data.model,replySource:data.replySource||data.usage?.replySource});
     encouragement=false;blindSpot=false;returnPath=false;if(!modeStart){if(input.value===sentDraft)input.value='';clearRecall();}pending=null;rememberDraft();status('保存しました');
     await loadMessages();await loadHistory();
   });
@@ -580,7 +601,7 @@ $('copyChat').onclick=()=>run(async()=>{
   }
   status('会話をコピーしました');
 });
-$('manageChats').onclick=()=>{if(!busy && ready && session){$('manageStatus').textContent='';$('manageDialog').showModal();}};
+$('manageChats').onclick=()=>{if(!busy && !planBusy && ready){$('manageStatus').textContent='';$('manageDialog').showModal();$('manageDialog').scrollTop=0;$('manageTitle').focus();}};
 $('closeManage').onclick=()=>$('manageDialog').close();
 function renderArchivedChats() {
   const list=$('archivedChats');list.replaceChildren();
@@ -627,6 +648,7 @@ async function refreshUsage() {
     $('usageScopeLabel').hidden=!result.admin;
     $('usageMonthly').textContent=DragonUsage.monthly(result);
     document.querySelectorAll('.answer-usage').forEach(detail=>{detail.querySelector('p').textContent=DragonUsage.answer(usageCache.get(detail.dataset.requestId));});
+    document.querySelectorAll('.answer-provider').forEach(label=>{label.textContent=DragonUsage.provider(usageCache.get(label.dataset.requestId));label.hidden=!label.textContent;});
   }catch(error){if(version===usageVersion&&userEpoch===epoch)$('usageMonthly').textContent=error.message||'使用量を取得できませんでした。会話は続けられます。';}
 }
 $('openUsage').onclick=()=>{$('usageDialog').showModal();void refreshUsage();};
@@ -640,6 +662,7 @@ $('archivedDialog').addEventListener('cancel',()=>{if(session)$('manageDialog').
 $('deleteAllChats').onclick=()=>{$('manageDialog').close();openDelete(true);};
 $('cancelDelete').onclick=()=>{$('deleteDialog').close();deleteTarget=null;};
 function exportConversationsPdf(fromManagement=false){return run(async()=>{
+  if(!session)return;
   const target=fromManagement?{all:true,id:null,userId:session?.user.id,version:epoch}:deleteTarget;
   const outputStatus=$(fromManagement?'manageStatus':'deleteStatus');
   if(!target || target.version!==epoch || target.userId!==session?.user.id)return;
@@ -742,6 +765,7 @@ async function start(){
   try{
     const response=await fetch('/api/config',{cache:'no-store'});const config=await response.json();
     if(!response.ok)throw new Error(config.error);
+    aiProvider.configure(config);
     if(!window.supabase)throw new Error('ログイン機能を読み込めませんでした。ページを再読み込みしてください。');
     db=window.supabase.createClient(config.url,config.publishableKey);
     db.auth.onAuthStateChange((_event,next)=>{setTimeout(()=>changeSession(next),0);});

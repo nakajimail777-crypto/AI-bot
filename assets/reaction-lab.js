@@ -13,7 +13,7 @@ function mount(){
  dialog.append(content,live);document.body.append(dialog,confirm);
  let data=createExperiment(),revision=null,saved=null,savedAt=null,screen='home',origin=entry;
  let context={db:null,userId:null,generation:0},busy=false,controller=null,listToken=0,offset=0;
- let conversation=null,pending=null,consultText='',answer='',importData=null,consultOrigin='card',consultStep=0;
+ let conversation=null,pending=null,consultText='',answer='',answerProvider='',importData=null,consultOrigin='card',consultStep=0;
  const storage=createLabStorage(()=>context);
  const fingerprint=()=>JSON.stringify(data);
  const hasInput=()=>Object.values(data.fields).some(Boolean)||data.step>0||data.choice!=='undecided'||data.attempt!=='not_yet';
@@ -27,7 +27,7 @@ function mount(){
   }else context={...context,...next};
  }
  document.addEventListener('dragon-reflection-session',sync);sync();
- function reset(next=createExperiment()){data=next;revision=null;saved=null;savedAt=null;conversation=null;pending=null;answer='';consultText='';consultOrigin='card';consultStep=0;}
+ function reset(next=createExperiment()){data=next;revision=null;saved=null;savedAt=null;conversation=null;pending=null;answer='';answerProvider='';consultText='';consultOrigin='card';consultStep=0;}
  function startConsult(from){consultOrigin=from;consultStep=from==='result'?4:data.step;consultText=consultationText({...data,step:consultStep});answer='';show('consult');}
  function show(next){if(busy)return;screen=next;render();}
  function open(){origin=document.activeElement;dialog.showModal();show('home');}
@@ -151,6 +151,7 @@ function mount(){
  ]);}
  function renderConsult(){
   heading('スピリットドラゴンに相談する','送信する内容を確認・編集してください。相談しなくても実験を進められます。');
+  content.append(node('p',`使うAI：${globalThis.getDragonAIProviderState?.().label||'Gemini'}（「会話の管理」で変更できます）`,{class:'rl-note'}));
   content.append(node('p','送信した内容と返答は通常の会話履歴に保存されます。実験記録・長期記憶への自動登録はしません。返答待ちをやめても、送信済みの相談は会話履歴に残る場合があります。既存の会話モード・添付・選択中の記憶は、この相談には引き継ぎません。',{class:'rl-note'}));
   const area=node('textarea','',{id:'rl-consult-text',rows:'7','aria-describedby':'rl-consult-count'});area.value=consultText;
   const count=node('p','',{id:'rl-consult-count'});
@@ -158,11 +159,13 @@ function mount(){
   content.append(node('label','相談に送る文章',{for:'rl-consult-text'}),area,count);
   const buttons=[button('この内容を相談する',()=>consult(false))];if(consultStep===2)buttons.push(button('候補を最大3つ相談する',()=>consult(true)));
   content.append(actions(...buttons,button(consultOrigin==='result'?'前後の比較に戻る':'相談せず戻る',()=>show(consultOrigin))));
-  if(answer){content.append(node('h3','スピリットドラゴンの返答'),node('p',answer,{class:'rl-verbatim'}),node('p','この返答は実験記録に反映していません。使いたい部分があれば、戻って自分の言葉で記入できます。'),button('戻って自分の言葉で記入する',()=>show('card')));}
+  if(answer){content.append(node('h3','スピリットドラゴンの返答'+(answerProvider?` · ${answerProvider}`:'')),node('p',answer,{class:'rl-verbatim'}),node('p','この返答は実験記録に反映していません。使いたい部分があれば、戻って自分の言葉で記入できます。'),button('戻って自分の言葉で記入する',()=>show('card')));}
  }
  async function consult(candidates){
   if(!consultText.trim()||consultText.length>3900){announce('相談する文章を1〜3,900文字にしてください。元の記録は変更しません。');return;}
-  const text=consultText.trim(),step=consultStep,key=JSON.stringify({text,step,candidates});
+  const provider=globalThis.getDragonAIProviderState?.()||{id:'gemini',label:'Gemini',available:true};
+  if(!provider.available){announce(provider.label+'は準備中です。「会話の管理」で利用できるAIを選んでください。');return;}
+  const text=consultText.trim(),step=consultStep,key=JSON.stringify({text,step,candidates,provider:provider.id});
   const consultationGeneration=context.generation;
   controller=new AbortController();const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(85000)]);
   await operation(async generation=>{
@@ -173,10 +176,10 @@ function mount(){
    if(created.error)throw created.error;if(generation!==context.generation)return;
    const auth=await ctx.db.auth.getSession();if(auth.error||!auth.data?.session)throw new Error('AUTH_REQUIRED');if(generation!==context.generation)return;
    if(!pending||pending.key!==key)pending={key,id:crypto.randomUUID()};
-   const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth.data.session.access_token}`},body:JSON.stringify({message:text,conversationId:conversation,requestId:pending.id,reactionLab:{step,candidates}}),signal});
+   const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth.data.session.access_token}`},body:JSON.stringify({provider:provider.id,message:text,conversationId:conversation,requestId:pending.id,reactionLab:{step,candidates}}),signal});
    const result=await response.json();if(generation!==context.generation)return;
    if(!response.ok){busy=false;render();announce(result.error||'相談できませんでした。文章は保持しています。');return;}
-   if(typeof result.reply!=='string')throw new Error('INVALID_RECORD');answer=result.reply;pending=null;busy=false;render();announce('返答を表示しました。実験記録への反映はしていません。');
+   if(typeof result.reply!=='string')throw new Error('INVALID_RECORD');answer=result.reply;answerProvider=globalThis.DragonUsage?.provider({...result.usage,provider:result.usage?.provider||result.provider,model:result.usage?.model||result.model,replySource:result.replySource||result.usage?.replySource})||'';pending=null;busy=false;render();announce('返答を表示しました。実験記録への反映はしていません。');
   });
   if(consultationGeneration===context.generation)controller=null;
  }

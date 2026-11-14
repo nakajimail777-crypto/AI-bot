@@ -4,21 +4,80 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 const source=(await readFile(new URL('../assets/app.js',import.meta.url),'utf8')).replace(/\nstart\(\);\s*$/, '\n');
+const providerSource=await readFile(new URL('../assets/ai-provider.js',import.meta.url),'utf8');
+const usageSource=await readFile(new URL('../assets/usage-ui.js',import.meta.url),'utf8');
 function setup(){
  const nodes=new Map();
  const element=id=>{
-  if(!nodes.has(id))nodes.set(id,{value:'',textContent:'',style:{},classList:{toggle(){},add(){},remove(){}},addEventListener(){},setAttribute(){},removeAttribute(){},close(){},showModal(){},replaceChildren(){},append(){},focus(){}});
+  if(!nodes.has(id))nodes.set(id,{value:'',textContent:'',style:{},listeners:{},classList:{toggle(){},add(){},remove(){}},addEventListener(type,handler){this.listeners[type]=handler;},setAttribute(){},removeAttribute(){},close(){},showModal(){},replaceChildren(){},append(){},focus(){}});
   return nodes.get(id);
  };
  let finish,requested;
- const context=vm.createContext({document:{dispatchEvent(){},addEventListener(){},getElementById:element,querySelector:()=>({open:true}),querySelectorAll:()=>[]},location:{search:''},window:{},crypto:{randomUUID},Event,setTimeout,clearTimeout,setInterval:()=>0,AbortSignal,URL,Blob,sessionStorage:{setItem(){},getItem(){return null;}},fetch:async(url,init)=>{requested={url,body:JSON.parse(init.body)};return new Promise(resolve=>{finish=resolve;});}});
+ const context=vm.createContext({document:{dispatchEvent(){},addEventListener(){},getElementById:element,createElement:type=>element(Symbol(type)),querySelector:()=>({open:true}),querySelectorAll:()=>[]},location:{search:''},window:{},crypto:{randomUUID},Event,setTimeout,clearTimeout,setInterval:()=>0,AbortSignal,URL,Blob,sessionStorage:{setItem(){},getItem(){return null;}},fetch:async(url,init)=>{requested={url,body:JSON.parse(init.body)};return new Promise(resolve=>{finish=resolve;});}});
+ vm.runInContext(providerSource,context);
+ vm.runInContext(usageSource,context);context.DragonUsage=context.window.DragonUsage;
  vm.runInContext(source,context);
- vm.runInContext(`ready=true;session={user:{id:'user'}};activeId='chat';selfReturn=true;globalThis.originalControls=controls;
+ vm.runInContext(`aiProvider.configure({providers:[{id:'gemini',available:true},{id:'openai',available:true}]});ready=true;session={user:{id:'user'}};activeId='chat';selfReturn=true;globalThis.originalControls=controls;
  db={auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}};
  controls=()=>{};rememberDraft=()=>{};replyWaiting=()=>{};loadMessages=async()=>{};loadHistory=async()=>{};
  run=action=>{globalThis.completed=action();};`,context);
- return {context,nodes,element,get requested(){return requested;},respond:()=>finish({ok:true,json:async()=>({saved:true,reply:'reply'})})};
+ return {context,nodes,element,get requested(){return requested;},respond:(payload={saved:true,reply:'reply'})=>finish({ok:true,json:async()=>payload}),fail:()=>finish({ok:false,json:async()=>({error:'応答を取得できませんでした'})})};
 }
+
+test('guests can open AI settings while saved conversation controls stay hidden and inactive',async()=>{
+ const s=setup();let opened=false;s.element('manageDialog').showModal=()=>{opened=true;};
+ vm.runInContext('session=null;trialReady=true;originalControls();',s.context);
+ assert.equal(s.element('manageChats').hidden,false);assert.equal(s.element('manageChats').disabled,false);
+ assert.equal(s.element('managedSavedChats').hidden,true);assert.equal(s.element('manageGuestHint').hidden,false);assert.equal(s.element('manageExportPdf').disabled,true);
+ s.element('manageChats').onclick();assert.equal(opened,true);
+ vm.runInContext('exportConversationsPdf(true)',s.context);await s.context.completed;assert.equal(s.requested,undefined);
+ vm.runInContext("session={user:{id:'user'}};originalControls();",s.context);assert.equal(s.element('managedSavedChats').hidden,false);assert.equal(s.element('manageGuestHint').hidden,true);
+ opened=false;vm.runInContext('planBusy=true;originalControls();',s.context);s.element('manageChats').onclick();assert.equal(opened,false);assert.equal(s.element('manageChats').disabled,true);
+});
+
+test('a saved reply without a usage receipt stays provider-unknown and is labelled as cached',async()=>{
+ const s=setup();s.element('messageInput').value='再送';
+ vm.runInContext('submitMessage()',s.context);await new Promise(resolve=>setImmediate(resolve));
+ const requestId=s.requested.body.requestId;
+ s.respond({saved:true,reply:'保存されている返信',provider:null,model:null,replySource:'cached'});await s.context.completed;
+ const receipt=vm.runInContext('usageCache',s.context).get(requestId);
+ assert.equal(receipt.provider,null);assert.equal(receipt.model,null);assert.equal(s.context.DragonUsage.provider(receipt),'保存済みの返信');
+});
+
+for(const replySource of ['ai','fallback','cached'])test(`guest response metadata is attached only to a matching newly finished turn: source=${replySource}`,async()=>{
+ const s=setup();s.element('messageInput').value='新しい相談';
+ vm.runInContext(`session=null;trialReady=true;renderMessages=()=>{globalThis.didRender=true;};loadTrial=async()=>{rows=[{role:'user',content:'以前の相談'},{role:'assistant',content:'以前の回答'},{role:'user',content:'新しい相談'},{role:'assistant',content:'今回の回答'}];};submitMessage();`,s.context);
+ await new Promise(resolve=>setImmediate(resolve));
+ s.respond({reply:'今回の回答',remaining:3,provider:'openai',model:'gpt-5.4-mini-2026-03-17',replySource});await s.context.completed;
+ const resultingRows=vm.runInContext('rows',s.context);
+ assert.equal(resultingRows[1].usage,undefined);
+ if(replySource==='cached'){assert.equal(resultingRows[3].usage,undefined);assert.equal(s.context.didRender,undefined);}
+ else{assert.equal(resultingRows[3].usage.provider,'openai');assert.equal(resultingRows[3].usage.replySource,replySource);assert.equal(s.context.didRender,true);assert.match(s.context.DragonUsage.provider(resultingRows[3].usage),replySource==='fallback'?/定型の案内/:/OpenAI/);}
+});
+
+test('guest metadata does not label a mismatched history row or a changed session',async()=>{
+ for(const changedSession of [false,true]){
+  const s=setup();s.element('messageInput').value='相談';
+  vm.runInContext(`session=null;trialReady=true;renderMessages=()=>{throw new Error('wrong history update');};loadTrial=async()=>{rows=[{role:'user',content:'別の相談'},{role:'assistant',content:'別の回答'}];${changedSession?'epoch++;':''}};submitMessage();`,s.context);
+  await new Promise(resolve=>setImmediate(resolve));
+  s.respond({reply:changedSession?'別の回答':'今回の回答',remaining:4,provider:'openai',replySource:'ai'});await s.context.completed;
+  assert.equal(vm.runInContext('rows[1].usage',s.context),undefined);
+ }
+});
+
+for(const guest of [false,true])test(`selected provider travels with the pending request and switching changes its identity: guest=${guest}`,async()=>{
+ const s=setup();s.element('messageInput').value='短く話す';
+ if(guest)vm.runInContext('session=null;trialReady=true;loadTrial=async()=>{};',s.context);
+ vm.runInContext('submitMessage()',s.context);await new Promise(resolve=>setImmediate(resolve));
+ const first=s.requested.body.requestId;assert.equal(s.requested.body.provider,'gemini');
+ // A failed send retains the pending request and editable draft until the AI changes.
+ s.fail();await assert.rejects(s.context.completed,/応答を取得できませんでした/);
+ s.element('aiProvider').value='openai';s.element('aiProvider').listeners.change();
+ assert.equal(vm.runInContext(guest?'trialPending':'pending',s.context),null);
+ vm.runInContext('submitMessage()',s.context);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(s.requested.body.provider,'openai');assert.notEqual(s.requested.body.requestId,first);
+ s.respond();await s.context.completed;
+});
 test('activation uses an empty new message and leaves the unsent draft intact',async()=>{
  const s=setup();s.element('messageInput').value='未送信の下書き';
  vm.runInContext('submitMessage(true)',s.context);await new Promise(resolve=>setImmediate(resolve));

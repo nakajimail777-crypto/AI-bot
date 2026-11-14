@@ -11,8 +11,8 @@ test('reviewed proposals create only unchecked fresh items and reject malformed 
 test('adoption waits for saving, prevents repeated clicks and keeps proposals on failure',async()=>{
  const previousDocument=globalThis.document,previousFetch=globalThis.fetch;
  const elements=new Map();
- const element=()=>({value:'',hidden:false,disabled:false,textContent:'',children:[],replaceChildren(){this.children=[];},append(...nodes){this.children.push(...nodes);},setAttribute(){}});
- globalThis.document={getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element};
+ const element=()=>({value:'',hidden:false,disabled:false,textContent:'',children:[],replaceChildren(){this.children=[];},append(...nodes){this.children.push(...nodes);},setAttribute(){},addEventListener(){}});
+ globalThis.document={getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element,addEventListener(){},dispatchEvent(){}};
  const el=id=>document.getElementById(id);
  globalThis.fetch=async()=>({ok:true,json:async()=>({plan:{title:'読書',items:['一頁読む']}})});
  try{

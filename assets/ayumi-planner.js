@@ -7,6 +7,11 @@ globalThis.DragonAyumiPlanner={
   mount({context,apply}){
     const el=id=>document.getElementById(id);let version=0,plan=null,controller=null,applying=false;
     const status=text=>{el('ayumiPlanStatus').textContent=text;};
+    const providerState=()=>globalThis.getDragonAIProviderState?.()||{id:'gemini',label:'Gemini',available:true};
+    const syncProvider=()=>{const p=providerState();if(el('ayumiPlanProvider'))el('ayumiPlanProvider').textContent=`「AIで案を作る」を押すと、この目標を${p.label}へ送ります。AIは「会話の管理」の「使うAI」で変更できます。ログインが必要です。提案はまだ保存されません。`;};
+    const setBusy=value=>document.dispatchEvent(new CustomEvent('dragon-ai-plan-busy',{detail:value}));
+    document.addEventListener('dragon-ai-provider-change',syncProvider);
+    el('ayumiPlanner')?.addEventListener('toggle',syncProvider);
     function clear(){plan=null;el('ayumiPlanReview').hidden=true;el('ayumiPlanItems').replaceChildren();el('ayumiPlanTitle').value='';}
     function render(){
       el('ayumiPlanTitle').value=plan.title;el('ayumiPlanItems').replaceChildren();el('ayumiPlanReview').hidden=false;
@@ -22,22 +27,24 @@ globalThis.DragonAyumiPlanner={
       const goal=el('ayumiPlanGoal').value.trim();
       if(!goal||goal.length>2000){status('目標を1〜2,000文字で入力してください。');return;}
       if(controller)return;
+      const provider=providerState();
+      if(!provider.available){status(provider.label+'は準備中です。「会話の管理」の「使うAI」で利用できるAIを選んでください。');return;}
       const c=context();
       if(!c.db||!c.session||c.session.user.is_anonymous){status('AIで案を作るにはログインしてください。');return;}
-      const v=++version,requestController=new AbortController();controller=requestController;
+      const v=++version,requestController=new AbortController();controller=requestController;setBusy(true);
       const timeout=setTimeout(()=>requestController.abort(),80000);
-      clear();el('ayumiPlanGenerate').disabled=true;el('ayumiPlanGoal').disabled=true;status('小さな一歩の案を考えています…');
+      clear();el('ayumiPlanGenerate').disabled=true;el('ayumiPlanGoal').disabled=true;status(provider.label+'で小さな一歩の案を考えています…');
       try{
         const {data,error}=await c.db.auth.getSession();
         if(v!==version)return;
         if(error||!data?.session?.access_token||data.session.user.id!==c.session.user.id)throw new Error('ログインし直してください。');
-        const response=await fetch('/api/ayumi-plan',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${data.session.access_token}`},body:JSON.stringify({goal}),signal:requestController.signal});
+        const response=await fetch('/api/ayumi-plan',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${data.session.access_token}`},body:JSON.stringify({goal,provider:provider.id}),signal:requestController.signal});
         const result=await response.json();if(v!==version)return;
         if(!response.ok)throw new Error(result.error||'案を作れませんでした。');
         DragonAyumiPlanner.plan(result.plan);plan={title:result.plan.title,items:[...result.plan.items]};render();
         status(result.preview===true?'操作確認用の模擬応答です。実際のAIには接続していません。':'案ができました。内容を確認し「新しい目標として保存」を押すと一覧に追加されます。今の目標に項目を足すこともできます。まだ保存していません。');
       }catch(error){if(v===version)status(error.name==='AbortError'?'作成を中止しました。入力は残っています。':error.message||'案を作れませんでした。');}
-      finally{clearTimeout(timeout);if(v===version){controller=null;el('ayumiPlanGenerate').disabled=false;el('ayumiPlanGoal').disabled=false;}}
+      finally{clearTimeout(timeout);if(v===version){controller=null;setBusy(false);el('ayumiPlanGenerate').disabled=false;el('ayumiPlanGoal').disabled=false;}}
     };
     el('ayumiPlanGoal').oninput=()=>{clear();status('');};
     async function adopt(append){
@@ -56,7 +63,7 @@ globalThis.DragonAyumiPlanner={
     }
     el('ayumiPlanApply').onclick=()=>adopt(false);
     el('ayumiPlanAppend').onclick=()=>adopt(true);
-    el('ayumiPlanCancel').onclick=()=>{version++;controller?.abort();controller=null;clear();el('ayumiPlanGenerate').disabled=false;el('ayumiPlanGoal').disabled=false;status('案を取り消しました。今の目標は変更していません。');};
-    return {reset(){version++;controller?.abort();controller=null;clear();el('ayumiPlanGenerate').disabled=false;el('ayumiPlanGoal').disabled=false;el('ayumiPlanGoal').value='';status('');}};
+    el('ayumiPlanCancel').onclick=()=>{version++;controller?.abort();controller=null;setBusy(false);clear();el('ayumiPlanGenerate').disabled=false;el('ayumiPlanGoal').disabled=false;status('案を取り消しました。今の目標は変更していません。');};
+    return {reset(){version++;controller?.abort();controller=null;setBusy(false);clear();el('ayumiPlanGenerate').disabled=false;el('ayumiPlanGoal').disabled=false;el('ayumiPlanGoal').value='';status('');}};
   }
 };

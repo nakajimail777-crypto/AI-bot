@@ -1,10 +1,19 @@
 (() => {
   const tokens = n => Number.isFinite(n) ? n.toLocaleString('ja-JP') : '未取得';
   const money = n => Number.isFinite(n) ? `$${n.toFixed(6)}` : '未取得';
+  function provider(usage){
+    if(usage?.replySource==='fallback')return '定型の案内';
+    if(usage?.replySource==='cached')return '保存済みの返信';
+    const model=usage?.model||usage?.generation?.model;
+    const id=usage?.provider||(/^(gpt-|o[1-9])/.test(model||'')?'openai':/^gemini-/.test(model||'')?'gemini':null);
+    const name=id==='openai'?'OpenAI':id==='gemini'?'Gemini':'';
+    return name?(model?`${name} · ${model}`:name):'';
+  }
   function answer(usage) {
     if (!usage?.generation) return '使用量：未記録（計測開始前、または取得できなかった回答）';
     const g = usage.generation, rag = usage.rag;
     const lines = [
+      provider(usage),
       `入力 ${tokens(g.input)} ／ 出力 ${tokens(g.output)} ／ 合計 ${tokens(g.total)} トークン`,
       `出力の内訳：回答 ${tokens(g.response)}・思考 ${tokens(g.thinking)}`,
       `推定API料金（有料換算・USD）：${money(usage.estimatedUsd)}`,
@@ -15,7 +24,7 @@
     else if (g.billingMode === 'unknown') lines.push('課金設定は未確認です。表示額は請求確定額ではありません。');
     if (rag?.outcome !== 'succeeded') lines.push('この回答では参考資料の検索を利用できませんでした。');
     if (!usage.recorded) lines.push('使用量の保存を確認できず、月間累計に含まれない可能性があります。');
-    return lines.join('\n');
+    return lines.filter(Boolean).join('\n');
   }
   function monthly(data) {
     const m=data.monthly, label=data.scope==='all'?'サービス全体':'あなたの会話';
@@ -29,5 +38,5 @@
     lines.push('記録できたAPI呼び出しのみの集計です。計測開始前・記録失敗・外部ツールの利用は含まれません。会話を削除しても累計は残ります。');
     return lines.join('\n');
   }
-  window.DragonUsage={answer,monthly};
+  window.DragonUsage={answer,monthly,provider};
 })();

@@ -25,14 +25,14 @@ test('quoted or negated refusal is not promoted into a hard boundary',()=>{
 test('explicit refusal or closure overrides a conflicting high body score and skips further generation',async()=>{
  for(const text of ['もう考えたくない','疲れた','深掘りしたくない','まだ分からないままでいい','ここまででいい','少し落ち着いた']){
   let calls=0;
-  const reply=await selfReturnReply({message:text,apiKey:'test',fetcher:async()=>{calls++;return modelResponse(JSON.stringify(decision('ask_one')));}});
+  const reply=await selfReturnReply({env:{GEMINI_API_KEY:'test'},message:text,apiKey:'test',fetcher:async()=>{calls++;return modelResponse(JSON.stringify(decision('ask_one')));}});
   assert.equal(calls,1);assert.doesNotMatch(reply,/[?？]|どうしたい|呼吸|身体|body_anchor/);
  }
 });
 test('two-stage call enforces schema, suppresses unsolicited questions, and hides internal data',async()=>{
  const calls=[];
  const d=decision('ask_one','mixed_state');d.reason_summary='PRIVATE_REASON';
- const reply=await selfReturnReply({message:'AIに言われたから、そう思ってるだけかも',apiKey:'test',fetcher:async(url,init)=>{
+ const reply=await selfReturnReply({env:{GEMINI_API_KEY:'test'},message:'AIに言われたから、そう思ってるだけかも',apiKey:'test',fetcher:async(url,init)=>{
   calls.push(JSON.parse(init.body));return modelResponse(calls.length===1?JSON.stringify(d):'AIの意見はいったん保留にできます。どのあたりが引っかかっていますか？');
  }});
  assert.equal(calls.length,2);assert.deepEqual(calls[0].generationConfig.responseJsonSchema,decisionSchema);
@@ -43,7 +43,7 @@ test('two-stage call enforces schema, suppresses unsolicited questions, and hide
 test('classification failures continue to a normal generation call',async()=>{
  for(const failure of ['timeout','http','json','schema']){
   let calls=0;
-  const reply=await selfReturnReply({message:'今は肩が重いのが分かる',apiKey:'test',fetcher:async()=>{
+  const reply=await selfReturnReply({env:{GEMINI_API_KEY:'test'},message:'今は肩が重いのが分かる',apiKey:'test',fetcher:async()=>{
    if(++calls===1){if(failure==='timeout')throw new DOMException('timed out','TimeoutError');if(failure==='http')return jsonResponse({},503);return modelResponse(failure==='json'?'not json':'{}');}
    return modelResponse('今は肩の重さが分かるんですね。その感覚から意味や答えを探さずにいても大丈夫です。');
   }});
@@ -52,10 +52,10 @@ test('classification failures continue to a normal generation call',async()=>{
 });
 test('full outage fallback does not ask again about sensations, wishes, body refusal or closure',async()=>{
  for(const message of ['肩が重い','休みたい気もする','身体に注意を向けたくない','まだ分からないままでいい','もう考えたくない']){
-  const reply=await selfReturnReply({message,fetcher:async()=>{throw Error('offline');}});
+  const reply=await selfReturnReply({env:{GEMINI_API_KEY:'test'},message,fetcher:async()=>{throw Error('offline');}});
   assert.doesNotMatch(reply,/[?？]|呼吸|どうしたい|本音|スコア/);
  }
- const entry=await selfReturnReply({modeStart:true,fetcher:async()=>{throw Error('offline');}});
+ const entry=await selfReturnReply({env:{GEMINI_API_KEY:'test'},modeStart:true,fetcher:async()=>{throw Error('offline');}});
  assert.equal((entry.match(/[?？]/g)||[]).length,0);assert.match(entry,/私の言葉も/);
 });
 test('reply boundary rejects internal JSON, exploration prompts, and unsolicited questions',()=>{
@@ -81,7 +81,7 @@ test('fallback responses keep self return distinct from exploration and sky gazi
 test('selected memory and PDF reach only generation, never the minimal classifier',async()=>{
  const calls=[];
  const pdf={mimeType:'application/pdf',data:'test-pdf-bytes'};
- await selfReturnReply({message:'この話の気になるところを確認したい',recalledMemory:'SELECTED_OLD_MEMORY',pdf,fetcher:async(_,init)=>{
+ await selfReturnReply({env:{GEMINI_API_KEY:'test'},message:'この話の気になるところを確認したい',recalledMemory:'SELECTED_OLD_MEMORY',pdf,fetcher:async(_,init)=>{
   calls.push(JSON.parse(init.body));return modelResponse(calls.length===1?JSON.stringify(decision()):'今は結論を急がずにいても大丈夫です。');
  }});
  assert.doesNotMatch(JSON.stringify(calls[0]),/SELECTED_OLD_MEMORY|test-pdf-bytes/);
@@ -91,7 +91,7 @@ test('selected memory and PDF reach only generation, never the minimal classifie
 test('body refusal, tentative sorting and corrections reach generation as user data under the rules',async()=>{
  for(const message of ['身体には注意を向けたくない','全部混ざっていて少し整理したい','違う。休みたいのではない']){
   const calls=[];
-  await selfReturnReply({message,fetcher:async(_,init)=>{calls.push(JSON.parse(init.body));return modelResponse(calls.length===1?JSON.stringify(decision()):'話してくれたことを受け止めます。');}});
+  await selfReturnReply({env:{GEMINI_API_KEY:'test'},message,fetcher:async(_,init)=>{calls.push(JSON.parse(init.body));return modelResponse(calls.length===1?JSON.stringify(decision()):'話してくれたことを受け止めます。');}});
   const payload=JSON.parse(calls[1].contents[0].parts[0].text);
   assert.equal(payload.conversation.latest_user_message,message);
   assert.match(calls[1].systemInstruction.parts[0].text,/AIが内外を分類しない/);
@@ -133,6 +133,72 @@ for(const guest of [false,true])test(`${guest?'guest':'signed-in'} handler handl
 });
 test('current map stays out of self-return classification and uses the existing reply generation',async()=>{
  const calls=[],mindMap={version:1,id:'11111111-1111-4111-8111-111111111111',fields:{event:'架空の例：MAP_ONLY_DATA',feeling:'不明',interpretation:'不明',reaction:'なし',afterglow:'よくわからない'}};
- await selfReturnReply({message:'この図について',mindMap,fetcher:async(_,init)=>{calls.push(JSON.parse(init.body));return modelResponse(calls.length===1?JSON.stringify(decision()):'図に書かれた内容として受け止めます。');}});
+ await selfReturnReply({env:{GEMINI_API_KEY:'test'},message:'この図について',mindMap,fetcher:async(_,init)=>{calls.push(JSON.parse(init.body));return modelResponse(calls.length===1?JSON.stringify(decision()):'図に書かれた内容として受け止めます。');}});
  assert.equal(calls.length,2);assert.doesNotMatch(JSON.stringify(calls[0]),/MAP_ONLY_DATA/);assert.match(JSON.stringify(calls[1].contents),/MAP_ONLY_DATA/);assert.match(calls[1].systemInstruction.parts[0].text,/本人の実体験として語らない/);
+});
+
+test('OpenAI self-return routes both stages through Responses and keeps attachments out of classification',async()=>{
+ const calls=[],mindMap={version:1,id:'11111111-1111-4111-8111-111111111111',fields:{event:'架空の例：MAP_ONLY_DATA',feeling:'不明',interpretation:'不明',reaction:'なし',afterglow:'よくわからない'}};
+ const pdf={mimeType:'application/pdf',data:'JVBERi0xLjQ='};
+ const d=decision('ask_one','mixed_state');d.reason_summary='PRIVATE_REASON';
+ const reply=await selfReturnReply({provider:'openai',env:{OPENAI_API_KEY:'test'},message:'この話を受け止めてほしい',mindMap,pdf,recalledMemory:'SELECTED_OLD_MEMORY',fetcher:async(url,init)=>{
+  calls.push({url,body:JSON.parse(init.body)});
+  const text=calls.length===1?JSON.stringify(d):'今は結論を急がず、自分のペースでいて大丈夫です。';
+  return jsonResponse({status:'completed',output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text}]}]});
+ }});
+ assert.equal(calls.length,2);assert.ok(calls.every(call=>call.url==='https://api.openai.com/v1/responses'));
+ assert.deepEqual(calls[0].body.text.format,{type:'json_schema',name:'self_return_decision',strict:true,schema:decisionSchema});
+ assert.doesNotMatch(JSON.stringify(calls[0]),/MAP_ONLY_DATA|SELECTED_OLD_MEMORY|JVBERi0xLjQ=/);
+ assert.match(JSON.stringify(calls[1].body.input),/MAP_ONLY_DATA|SELECTED_OLD_MEMORY/);
+ assert.equal(calls[1].body.input[0].content.at(-1).file_data,'data:application/pdf;base64,JVBERi0xLjQ=');
+ assert.doesNotMatch(JSON.stringify(calls[1].body.input),/PRIVATE_REASON|scores/);
+ assert.equal(JSON.parse(calls[1].body.input[0].content[0].text).guidance.next_action,'acknowledge_only');
+ assert.equal(reply,'今は結論を急がず、自分のペースでいて大丈夫です。');
+});
+
+test('OpenAI self-return still respects closure and falls back on incomplete replies',async()=>{
+ for(const message of ['ここまででいい','この話を受け止めてほしい']){
+  let calls=0;
+  const reply=await selfReturnReply({provider:'openai',env:{OPENAI_API_KEY:'test'},message,fetcher:async()=>{
+   calls++;
+   return jsonResponse(calls===1?{status:'completed',output:[{type:'message',role:'assistant',content:[{type:'output_text',text:JSON.stringify(decision())}]}]}:{status:'incomplete',output:[{type:'message',role:'assistant',content:[{type:'output_text',text:'UNSAVED_PARTIAL'}]}]});
+  }});
+  assert.equal(calls,message==='ここまででいい'?1:2);assert.doesNotMatch(reply,/UNSAVED_PARTIAL|scores|[?？]/);
+ }
+});
+
+test('unconfigured self-return makes no provider requests and returns the existing offline response',async()=>{
+ let calls=0;
+ const reply=await selfReturnReply({provider:'openai',env:{},message:'肩が重い',fetcher:async()=>{calls++;throw Error('should not call');}});
+ assert.equal(calls,0);assert.equal(reply,fallbackReply(makeContext([],'肩が重い')));
+});
+
+test('self-return reports each local fallback once without exposing its internal decision',async()=>{
+ for(const reason of ['closure','empty','invalid-reply','provider-failure']){
+  let requests=0;const notifications=[];
+  const message=reason==='closure'?'ここまででいい':reason==='empty'?'':'この話を受け止めてほしい';
+  const reply=await selfReturnReply({env:{GEMINI_API_KEY:'test'},message,onFallback:(...args)=>notifications.push(args),fetcher:async()=>{
+   requests++;
+   if(requests===1)return modelResponse(JSON.stringify(decision()));
+   if(reason==='provider-failure')throw Error('PRIVATE_PROVIDER_FAILURE');
+   return modelResponse('あなたの本音です。');
+  }});
+  assert.equal(notifications.length,1);assert.deepEqual(notifications[0],[]);
+  assert.equal(reply,fallbackReply(makeContext([],message)));
+ }
+});
+
+test('self-return does not label an accepted AI reply as fallback even after classifier failure',async()=>{
+ let requests=0,fallbacks=0;
+ const reply=await selfReturnReply({env:{GEMINI_API_KEY:'test'},message:'この話を受け止めてほしい',onFallback:()=>fallbacks++,fetcher:async()=>{
+  if(++requests===1)throw Error('classifier unavailable');
+  return modelResponse('今は結論を急がず、自分のペースでいて大丈夫です。');
+ }});
+ assert.equal(requests,2);assert.equal(fallbacks,0);assert.equal(reply,'今は結論を急がず、自分のペースでいて大丈夫です。');
+});
+
+test('fallback observer errors cannot suppress or replace the safe reply',async()=>{
+ const message='ここまででいい';
+ const reply=await selfReturnReply({env:{},message,onFallback:()=>{throw Error('observer failed');}});
+ assert.equal(reply,fallbackReply(makeContext([],message)));
 });

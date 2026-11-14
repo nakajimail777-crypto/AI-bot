@@ -33,7 +33,7 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    button, textarea { font: inherit; }
+    button, textarea, select { font: inherit; }
     button { color: inherit; }
 
     .app {
@@ -191,6 +191,15 @@
       font-weight: 600;
     }
 
+    #manageDialog{max-height:85dvh;overflow-y:auto}
+    .ai-provider-row{display:grid;gap:12px;margin:0 0 20px;padding:16px;color:#c6d2cb;background:#28302b;border:1px solid #526459;border-radius:13px;font-size:14px}
+    .ai-provider-label{display:flex;align-items:center;justify-content:space-between;gap:12px;white-space:nowrap}
+    .ai-provider-row select{min-height:40px;max-width:100%;padding:6px 24px 6px 11px;background:#303a34;color:#f0f5f2;border:1px solid #697e70;border-radius:9px;cursor:pointer;font-size:16px}
+    .ai-provider-row select:focus-visible{outline:2px solid #b6d8c3;outline-offset:3px}
+    .ai-provider-row select:disabled{opacity:.6;cursor:default}
+    .ai-provider-row small{color:#b6c2b9;font-size:12px;line-height:1.6}
+    .ai-provider-info{color:#b6c2b9;font-size:12px}.ai-provider-info summary{cursor:pointer}.ai-provider-info p{margin:10px 0 0;line-height:1.7}
+    .answer-provider{display:inline-block;color:#acbdaf;font-size:11px;line-height:1.5;padding:2px 0;margin-bottom:6px}
     .model-button:hover { background: var(--panel-hover); }
     .model-sub { color: #aaa; font-weight: 500; }
     .mobile-menu { display: none; margin-right: 4px; }
@@ -527,7 +536,10 @@
   </div>
 
   <dialog id="manageDialog" class="auth-dialog" aria-labelledby="manageTitle">
-    <h2 id="manageTitle">会話の管理</h2>
+    <h2 id="manageTitle" tabindex="-1">会話の管理</h2>
+    <div class="ai-provider-row"><label class="ai-provider-label" for="aiProvider">使うAI <select id="aiProvider" aria-describedby="aiProviderHint" disabled><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></label><small id="aiProviderHint" role="status">AIの接続を確認しています…</small><details class="ai-provider-info"><summary>AIの使い分け</summary><p>選んだAIに会話を送ります。切り替えると、これまでの会話の続きも引き継ぎます。本棚の検索にはGeminiを使います。</p></details></div>
+    <p id="manageGuestHint" hidden>ログインすると、会話の保存やPDF出力も使えます。</p>
+    <div id="managedSavedChats" hidden>
     <p>保存した会話をまとめてPDFに保存したり、削除したりできます。非表示にした会話も対象になります。</p>
     <div class="management-save">
       <button id="manageExportPdf" class="plain-button" type="button">PDFで保存</button>
@@ -541,8 +553,9 @@
       <p>保存した会話を削除します。次の画面で件数を確認できます。</p>
       <button id="deleteAllChats" class="plain-button danger" type="button" hidden>すべての会話を削除</button>
     </div>
+    </div>
     <p id="manageStatus" role="status"></p>
-    <div class="dialog-actions"><button id="closeManage" class="plain-button" type="button" autofocus>閉じる</button></div>
+    <div class="dialog-actions"><button id="closeManage" class="plain-button" type="button">閉じる</button></div>
   </dialog>
   <dialog id="archivedDialog" class="auth-dialog" aria-labelledby="archivedTitle">
     <h2 id="archivedTitle">非表示の会話</h2>
@@ -598,6 +611,7 @@
     <div class="dialog-actions"><button id="refreshUsage" class="plain-button" type="button">更新</button><button id="closeUsage" class="plain-button" type="button">閉じる</button></div>
   </dialog>
   <script defer src="/assets/usage-ui.js"></script>
+  <script defer src="/assets/ai-provider.js"></script>
   <script defer src="/assets/pdf-download.js"></script>
   <script defer src="/assets/encouragement.js"></script>
   <script defer src="/assets/ryuhijutsu-entry.js"></script>
@@ -632,7 +646,7 @@
       <p>目標を入力 → 案を確認・編集 →「新しい目標として保存」で、目標一覧に追加できます。</p>
       <label for="ayumiPlanGoal">やりたいこと</label>
       <textarea id="ayumiPlanGoal" maxlength="2000" rows="3" placeholder="例：11月9日にInstagramを公開したい"></textarea>
-      <p>「AIで案を作る」を押すと、この目標をGoogle Geminiへ送ります。ログインが必要です。提案はまだ保存されません。</p>
+      <p id="ayumiPlanProvider">「AIで案を作る」を押すと、「会話の管理」で選んだAIへこの目標を送ります。ログインが必要です。提案はまだ保存されません。</p>
       <button id="ayumiPlanGenerate" class="plain-button" type="button">AIで案を作る</button>
       <section id="ayumiPlanReview" hidden aria-label="チェックリスト案の確認">
         <label for="ayumiPlanTitle">目標名の案</label><input id="ayumiPlanTitle" maxlength="120">

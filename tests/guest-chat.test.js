@@ -70,7 +70,7 @@ test('guest generation uses server history, persona, RAG and selected mode',asyn
 });
 test('trial limit prevents Gemini calls and failures release only the held lease',async()=>{
  const s=setup({code:'TRIAL_LIMIT'});assert.equal((await s.invoke()).code,429);assert.ok(!s.calls.some(c=>c.url.includes('googleapis')));
- const f=setup({providerFailure:true});assert.equal((await f.invoke()).code,503);
+ const f=setup({providerFailure:true});const failed=await f.invoke();assert.equal(failed.code,429);assert.equal(failed.body.code,'AI_RATE_LIMIT');
  assert.ok(!f.calls.some(c=>c.body?.p_action==='finish'));
  const reserve=f.calls.find(c=>c.body?.p_action==='reserve').body,release=f.calls.find(c=>c.body?.p_action==='fail').body;
  assert.equal(release.p_lease,reserve.p_lease);assert.equal(release.p_id,reserve.p_id);

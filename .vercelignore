@@ -3,3 +3,7 @@ test-results
 tests
 scripts/preview-usage.mjs
 IMPLEMENTATION.md
+
+TEMP-openai-migration-ledger.md
+output
+PROVIDER-SWITCH.md

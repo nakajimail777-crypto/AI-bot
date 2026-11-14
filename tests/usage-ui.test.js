@@ -14,3 +14,12 @@ test('monthly view identifies unknown amounts and admin scope',()=>{
  const text=ui.monthly({month:'2026-09',scope:'all',monthly:{estimatedUsd:1,billedUsd:0,unknownCalls:2,billingUnknownCalls:1,categories:[]}});
  assert.match(text,/サービス全体/);assert.match(text,/未取得分/);assert.match(text,/未確定/);
 });
+
+test('answer labels come from the response receipt and distinguish local fallback text',()=>{
+ assert.equal(ui.provider({provider:'openai',generation:{model:'gpt-5.4-mini-2026-03-17'}}),'OpenAI · gpt-5.4-mini-2026-03-17');
+ assert.equal(ui.provider({generation:{model:'gemini-3.7-flash'}}),'Gemini · gemini-3.7-flash');
+ assert.equal(ui.provider(null),'');
+ assert.equal(ui.provider({provider:'openai',replySource:'fallback',generation:{model:'gpt-5.4-mini-2026-03-17'}}),'定型の案内');
+ assert.equal(ui.provider({provider:'openai',replySource:'cached'}),'保存済みの返信');
+ assert.match(ui.answer({provider:'openai',generation:{model:'gpt-5.4-mini-2026-03-17',input:50,output:20,total:70}}),/OpenAI/);
+});

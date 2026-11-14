@@ -1,4 +1,5 @@
 import {createHash} from "node:crypto";
+import {providerInfo} from '../lib/generation.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -23,5 +24,6 @@ export default async function handler(req, res) {
       return res.status(200).json({url:digest==='64e525bcd87221b4d1f8f3a09ba6f6e9e4c590e55f003beea25b4fb3bdd2f88f' ? 'https://ryuhijutsu-stepbook.nakajimail777.chatgpt.site/goal' : null});
     } catch { return hidden(); }
   }
-  return res.status(200).json({ url, publishableKey: key });
+  return res.status(200).json({ url, publishableKey: key, defaultProvider: 'gemini',
+    providers: ['gemini', 'openai'].map(id => providerInfo(id, process.env)) });
 }
