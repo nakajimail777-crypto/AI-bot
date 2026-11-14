@@ -5,7 +5,7 @@
 **Selected integration and model:** 既存のOpenAI gpt-5.4-mini-2026-03-17、reasoning low。既存Geminiモデル・768次元埋め込みを維持。
 **Approved migration scope and feature-stage plan:** 2026-11-15「本番のスピリットドラゴンもGeminiとOpenAIを切り替えられるようにできますか？」により、本番Webの通常会話・各モード・ゲスト・歩みプランの選択機能を実装する。既定はGemini。Stage 3: 共有生成処理と料金・認証・保存・各モード検証。Stage 4: 選択UI、PC/携帯表示と実API確認。Stage 5: 本番接続設定と公開確認。既存キー再利用は以前の「同じキーでお願いします」を継承し、新しい保存先へ秘密値を書く前に保存先を確認する。LINE連携と管理者用の学習抽出はこのWeb選択欄の対象外でGeminiを維持する。
 **Privacy and retention requirements:** OpenAIはstore:false。アカウント全体のZDR/地域保持設定は未確認で保証しない。本人が選んだAIへ既存の会話・その返信に必要な資料を送る。認証・DBの所有権管理・保存形式を維持。本棚の埋め込みはGeminiを継続しUIで説明。キーはサーバー環境変数のみ、公開画面に入力欄なし。
-**Assessment or implementation:** 本番Web向けの実装・ローカル検証は完了、公開設定の確認待ち。下の比較編集室の記録は過去の完了済み段階として保持する。本番向けの最新状態は最後の Production stage 欄を参照。
+**Assessment or implementation:** 本番Webの実装・公開と両AIの実応答確認まで完了。下の比較編集室の記録は過去の完了済み段階として保持する。本番向けの最新状態は最後の Production stage 欄を参照。
 
 Review every item against the application, selected model and provider, developer decisions, and approved scope. Add rows for newly documented capabilities or workload-specific differences; under the migration section, use one row per required workflow or invocation mode, even when sharing a provider, with its selected route, retained alternatives, code/documentation changes, and validation commands/results. Replace every placeholder with a concise, developer-visible decision; never claim a capability was implemented or tested without supporting evidence.
 
@@ -335,3 +335,15 @@ Scope receipt: 本番でもGemini/OpenAIを切り替える今回の依頼。作�
 - homepage SHA256変更なし: E8D3497C6638A9E13DE64BC1F6DDC5C0320094D3A203D38F1A2B4A4F16F9FA31。
 - Vercel crypto-3ce8/ai-bot のEnvironment Variables画面でOPENAIを検索しNo Results Found。既存キーの値は表示・コピーしていない。本番ProductionへOPENAI_API_KEYを追加する前の登録先確認待ち。
 - 公開は未実施。GitHub push、Vercel本番更新、本番DBへのSQL実行はまだ行っていない。本番への登録許可後はデプロイと両providerの実応答・再読込を確認する。
+
+### Production release completed: 2026-11-15
+
+- 本人の「よいです」により、編集室と同じOpenAIキーのVercel本番登録と公開を明示承認。
+- Vercel crypto-3ce8/ai-bot → OPENAI_API_KEY を Secret / Production として追加。成功通知を確認。キー値は既存の承認済みファイルからメモリ内で受け渡し、出力・チャット・画像・リポジトリには含めていない。
+- origin main が基準 f51be5d のままであることを確認し、8d5da3afcb64fc861ebf7e45f0c0f08dcca1da6c をfast-forward push。Vercel deployment 6pPLkYWRKGC2puVMEtv3SQjJYX2s はReady / Production。
+- https://ai-bot-beta-one.vercel.app/ のconfigで両provider available:true、新しいassetsと会話の管理内の選択欄を確認。
+- 公開版で架空の動作確認会話を新規作成。OpenAIは「確認できました。」を返し保存成功。使用量入力7481/出力21/合計7502、推定API料金$0.005714（Geminiの検索分を含む）、不明な請求設定は不明表示のまま。
+- 同じ会話でGeminiへ変更し、前の発言で指定した合言葉だけを依頼。「青い空」と返し保存成功。選択した接続先表示と、AIをまたぐ履歴引継ぎを確認。
+- 公開版を再読み込みし、両方の返信・各AI名・Geminiの選択保持を確認。consoleerrorなし。390×844で管理内の切り替えを確認し、viewportを戻した。スクリーンショット output/published-provider-management.png。
+- 本番DBのSQL変更なし。実際のLINE送信なし。Geminiキーや既存データ設定を変更していない。
+- この追記は公開検証の記録のみ。機能の変更と追加テストの必要はない。
