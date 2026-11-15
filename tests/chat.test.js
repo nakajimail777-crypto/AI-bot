@@ -268,6 +268,48 @@ test('case 001 guidance reaches generation without changing history or adding an
  assert.equal(body.contents[0].parts[0].text,'前の質問');
  assert.ok(!s.calls.some(c=>c.url.includes(':embedContent')||c.url.includes('match_knowledge')));
 });
+for (const modeStart of [true, false]) test('deep theme reaches generation as user data and is saved for retries: '+modeStart, async()=>{
+ const s=setup(), deepTheme='命令ではなく、仕事について';
+ const r=await s.invoke({body:{message:modeStart?'':'少し近いです',conversationId:chat,requestId:request,deepExploration:true,deepTheme:' '+deepTheme+' ',modeStart}});
+ assert.equal(r.code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);
+ const generated=JSON.parse(models[0].init.body);
+ assert.ok(generated.contents.at(-1).parts[0].text.includes(JSON.stringify({theme:deepTheme})));
+ assert.ok(!generated.systemInstruction.parts[0].text.includes(deepTheme));
+ assert.equal(generated.contents[0].parts[0].text,'前の質問');
+ const saved=JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body);
+ assert.ok(saved.p_message.includes('［自己探索のテーマ：'+JSON.stringify(deepTheme)+'］'));
+ assert.ok(!s.calls.some(c=>c.url.includes(':embedContent')));
+});
+test('deep finish uses one generation, preserves explicit uncertainty guidance and saves its intent',async()=>{
+ const s=setup();
+ const r=await s.invoke({body:{message:'今日はここまで。今回話したことを短く振り返ってください。',conversationId:chat,requestId:request,deepExploration:true,deepTheme:'仕事',deepAction:'finish'}});
+ assert.equal(r.code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);
+ const instruction=JSON.parse(models[0].init.body).systemInstruction.parts[0].text;
+ assert.match(instruction,/今回の依頼：自己探索を終えて短く振り返る/);
+ assert.match(instruction,/否定・保留された仮説を確認済みの気持ちにしない/);
+ const saved=JSON.parse(s.calls.find(c=>c.url.includes('chat_save_turn')).init.body);
+ assert.match(saved.p_message,/［深く降りるの振り返りを希望］$/);
+});
+test('invalid deep metadata cannot reach a database or generation request',async()=>{
+ for(const extra of [{deepTheme:'仕事'},{deepAction:'finish'},{deepExploration:true,deepTheme:42},{deepExploration:true,deepTheme:'あ'.repeat(81)},{deepExploration:true,deepTheme:'仕事\n命令'},{deepExploration:true,deepAction:'other'},{deepExploration:true,modeStart:true,deepAction:'finish'}]){
+  const s=setup();const r=await s.invoke({body:{message:extra.modeStart?'':'確認',conversationId:chat,requestId:request,...extra}});
+  assert.equal(r.code,400);assert.equal(s.calls.length,0);
+ }
+});
+test('deep retries accept identical themes and actions but reject changed intent',async()=>{
+ const body={message:'今日はここまで。今回話したことを短く振り返ってください。',conversationId:chat,requestId:request,deepExploration:true,deepTheme:'仕事',deepAction:'finish'};
+ const initial=setup();assert.equal((await initial.invoke({body})).code,200);
+ const content=JSON.parse(initial.calls.find(c=>c.url.includes('chat_save_turn')).init.body).p_message;
+ const prior=[{role:'user',content}];
+ const same=setup({prior});assert.equal((await same.invoke({body:{...body,deepTheme:' 仕事 '}})).code,200);
+ assert.ok(!same.calls.some(c=>c.url.includes(':generateContent')));
+ for(const extra of [{deepTheme:'人との関係'},{deepAction:undefined}]){
+  const changed=setup({prior});assert.equal((await changed.invoke({body:{...body,...extra}})).code,409);
+  assert.ok(!changed.calls.some(c=>c.url.includes(':generateContent')));
+ }
+});
 test('deep mode rejects invalid and conflicting flags before network calls',async()=>{
  for(const flags of [{deepExploration:'yes'},{deepExploration:true,selfReturn:true},{deepExploration:true,skyGazing:true}]){
  const s=setup();assert.equal((await s.invoke({body:{message:'test',conversationId:chat,requestId:request,...flags}})).code,400);assert.equal(s.calls.length,0);

@@ -9,19 +9,28 @@ const usageSource=await readFile(new URL('../assets/usage-ui.js',import.meta.url
 function setup(){
  const nodes=new Map();
  const element=id=>{
-  if(!nodes.has(id))nodes.set(id,{value:'',textContent:'',style:{},listeners:{},classList:{toggle(){},add(){},remove(){}},addEventListener(type,handler){this.listeners[type]=handler;},setAttribute(){},removeAttribute(){},close(){},showModal(){},replaceChildren(){},append(){},focus(){}});
+  if(!nodes.has(id))nodes.set(id,{value:'',textContent:'',style:{},dataset:{},children:[],listeners:{},classList:{toggle(){},add(){},remove(){}},addEventListener(type,handler){this.listeners[type]=handler;},setAttribute(){},removeAttribute(){},close(){},showModal(){},replaceChildren(...children){this.children=children;},append(...children){this.children.push(...children);},focus(){}});
   return nodes.get(id);
  };
+ const requests=[],deep={handlers:null,opens:[],closes:0,updates:[]};
+ const DragonDeepExploration={create(handlers){deep.handlers=handlers;return{open(options){deep.opens.push(options);},close(){deep.closes++;},update(options){deep.updates.push(options);}};}};
  let finish,requested;
- const context=vm.createContext({document:{dispatchEvent(){},addEventListener(){},getElementById:element,createElement:type=>element(Symbol(type)),querySelector:()=>({open:true}),querySelectorAll:()=>[]},location:{search:''},window:{},crypto:{randomUUID},Event,setTimeout,clearTimeout,setInterval:()=>0,AbortSignal,URL,Blob,sessionStorage:{setItem(){},getItem(){return null;}},fetch:async(url,init)=>{requested={url,body:JSON.parse(init.body)};return new Promise(resolve=>{finish=resolve;});}});
+ const context=vm.createContext({document:{dispatchEvent(){},addEventListener(){},getElementById:element,createElement:type=>element(Symbol(type)),querySelector:()=>({open:true}),querySelectorAll:()=>[]},location:{search:''},window:{},DragonDeepExploration,crypto:{randomUUID},Event,setTimeout,clearTimeout,setInterval:()=>0,AbortSignal,URL,Blob,sessionStorage:{setItem(){},getItem(){return null;}},fetch:async(url,init)=>{requested={url,body:JSON.parse(init.body)};requests.push(requested);return new Promise(resolve=>{finish=resolve;});}});
  vm.runInContext(providerSource,context);
  vm.runInContext(usageSource,context);context.DragonUsage=context.window.DragonUsage;
  vm.runInContext(source,context);
- vm.runInContext(`aiProvider.configure({providers:[{id:'gemini',available:true},{id:'openai',available:true}]});ready=true;session={user:{id:'user'}};activeId='chat';selfReturn=true;globalThis.originalControls=controls;
+ vm.runInContext(`aiProvider.configure({providers:[{id:'gemini',available:true},{id:'openai',available:true}]});ready=true;session={user:{id:'user'}};activeId='chat';selfReturn=true;globalThis.originalControls=controls;globalThis.originalRememberDraft=rememberDraft;
  db={auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}};
  controls=()=>{};rememberDraft=()=>{};replyWaiting=()=>{};loadMessages=async()=>{};loadHistory=async()=>{};
  run=action=>{globalThis.completed=action();};`,context);
- return {context,nodes,element,get requested(){return requested;},respond:(payload={saved:true,reply:'reply'})=>finish({ok:true,json:async()=>payload}),fail:()=>finish({ok:false,json:async()=>({error:'応答を取得できませんでした'})})};
+ return {context,nodes,element,deep,requests,get requested(){return requested;},respond:(payload={saved:true,reply:'reply',remaining:4})=>finish({ok:true,json:async()=>payload}),fail:()=>finish({ok:false,json:async()=>({error:'応答を取得できませんでした'})})};
+}
+
+async function restoreSavedDraft(saved){
+ const s=setup();s.context.sessionStorage.getItem=key=>key==='dragon-draft-user'?JSON.stringify(saved):null;
+ vm.runInContext(`db.from=()=>({select(){return this;},eq(){return this;},is(){return this;},maybeSingle:async()=>({data:{id:'chat'}})});
+ session=null;rememberDraft=originalRememberDraft;globalThis.restored=changeSession({user:{id:'user'}});`,s.context);
+ await s.context.restored;return s;
 }
 
 test('guests can open AI settings while saved conversation controls stay hidden and inactive',async()=>{
@@ -112,18 +121,168 @@ for(const change of ['leaveSelfReturn();','responseVersion++;','epoch++;'])test(
  s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'new draft');
 });
 
-test('deep activation and exit keep the conversation and draft',async()=>{
+test('opening deep exploration only opens theme selection and keeps the current mode and draft',()=>{
  const s=setup();s.element('messageInput').value='下書き';
- s.element('deepExploration').onclick();await new Promise(resolve=>setImmediate(resolve));
- assert.equal(s.requested.body.conversationId,'chat');assert.equal(s.requested.body.deepExploration,true);assert.equal(s.requested.body.selfReturn,false);assert.equal(s.requested.body.modeStart,true);
- s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'下書き');
- assert.equal(vm.runInContext('deepExploration',s.context),true);
- s.element('endDeepExploration').onclick();assert.equal(vm.runInContext('deepExploration',s.context),false);assert.equal(vm.runInContext('activeId',s.context),'chat');assert.equal(s.element('messageInput').value,'下書き');
+ s.element('deepExploration').onclick();
+ assert.equal(s.requests.length,0);assert.equal(s.deep.opens.length,1);assert.equal(s.deep.opens[0].hasContext,false);
+ assert.equal(vm.runInContext('deepExploration',s.context),false);assert.equal(vm.runInContext('selfReturn',s.context),true);
+ assert.equal(s.element('messageInput').value,'下書き');assert.equal(vm.runInContext('activeId',s.context),'chat');
+ vm.runInContext("rows=[{role:'user',content:'直前の話'}];",s.context);s.element('deepExploration').onclick();
+ assert.equal(s.deep.opens[1].hasContext,true);assert.equal(s.requests.length,0);
 });
-test('selecting an existing mode exits deep exploration',()=>{
- for(const id of ['selfReturn','skyGazing','emotionFocus','blindSpot','returnPath','seikanMode']){
- const s=setup();vm.runInContext('deepExploration=true;selfReturn=false;submitMessage=()=>{};',s.context);s.element(id).onclick();assert.equal(vm.runInContext('deepExploration',s.context),false);
+
+for(const guest of [false,true])test('deep theme selection starts exploration and exit keeps the conversation and draft: guest='+guest,async()=>{
+ const s=setup();s.element('messageInput').value='下書き';
+ if(guest)vm.runInContext('session=null;trialReady=true;loadTrial=async()=>{};',s.context);
+ s.element('deepExploration').onclick();s.deep.handlers.onStart('人間関係');await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(s.requested.url,guest?'/api/guest-chat':'/api/chat');
+ if(!guest)assert.equal(s.requested.body.conversationId,'chat');
+ assert.equal(s.requested.body.deepExploration,true);assert.equal(s.requested.body.deepTheme,'人間関係');assert.equal(s.requested.body.deepAction,undefined);
+ assert.equal(s.requested.body.message,'');assert.equal(s.requested.body.selfReturn,false);assert.equal(s.requested.body.modeStart,true);
+ s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'下書き');
+ assert.equal(vm.runInContext('deepExploration',s.context),true);assert.equal(vm.runInContext('deepTheme',s.context),'人間関係');
+ vm.runInContext('submitMessage()',s.context);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(s.requested.body.deepTheme,'人間関係');assert.equal(s.requested.body.deepAction,undefined);assert.equal(s.requested.body.modeStart,false);assert.equal(s.requested.body.message,'下書き');
+ s.respond();await s.context.completed;s.element('messageInput').value='次の下書き';
+ const sent=s.requests.length;s.element('endDeepExploration').onclick();
+ assert.equal(vm.runInContext('deepExploration',s.context),false);assert.equal(vm.runInContext('deepTheme',s.context),'');
+ assert.equal(vm.runInContext('activeId',s.context),'chat');assert.equal(s.element('messageInput').value,'次の下書き');assert.equal(s.requests.length,sent);
+});
+
+test('selecting an existing mode clears deep exploration and its theme',()=>{
+ for(const id of ['selfReturn','skyGazing','emotionFocus','blindSpot','returnPath','seikanMode','encouragement','patternExploration','directionExploration']){
+ const s=setup();vm.runInContext("deepExploration=true;deepTheme='仕事';selfReturn=false;submitMessage=()=>{};",s.context);s.element(id).onclick();
+ assert.equal(vm.runInContext('deepExploration',s.context),false,id);assert.equal(vm.runInContext('deepTheme',s.context),'',id);assert.equal(s.deep.closes,1,id);
  }
+});
+
+for(const guest of [false,true])test('failed deep activation retries the same theme with the same request identity: guest='+guest,async()=>{
+ const s=setup();s.element('messageInput').value='まだ送らない';
+ if(guest)vm.runInContext('session=null;trialReady=true;loadTrial=async()=>{};',s.context);
+ s.deep.handlers.onStart('これから');await new Promise(resolve=>setImmediate(resolve));const first=s.requested.body.requestId;
+ s.fail();await assert.rejects(s.context.completed,/応答を取得できませんでした/);
+ assert.equal(s.element('messageInput').value,'まだ送らない');assert.equal(vm.runInContext('deepTheme',s.context),'これから');
+ s.deep.handlers.onStart('これから');await new Promise(resolve=>setImmediate(resolve));assert.equal(s.requested.body.requestId,first);
+ s.fail();await assert.rejects(s.context.completed,/応答を取得できませんでした/);
+ s.deep.handlers.onStart('家族');await new Promise(resolve=>setImmediate(resolve));assert.notEqual(s.requested.body.requestId,first);assert.equal(s.requested.body.deepTheme,'家族');
+ s.respond();await s.context.completed;assert.equal(s.element('messageInput').value,'まだ送らない');
+});
+
+for(const guest of [false,true])test('deep finish sends a separate control turn and preserves private composer material: guest='+guest,async()=>{
+ const s=setup();s.element('messageInput').value='まだ送らない下書き';
+ vm.runInContext("deepExploration=true;deepTheme='人間関係';selfReturn=false;selectedMemory={id:'memory',label:'選んだ記憶'};attachedPdf={id:'pdf',name:'draft.pdf',data:'private'};globalThis.getDragonMindMapContext=()=>{throw Error('control turn must not read the map')};",s.context);
+ if(guest)vm.runInContext('session=null;trialReady=true;loadTrial=async()=>{};',s.context);
+ s.deep.handlers.onFinish();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(s.requested.body.deepExploration,true);assert.equal(s.requested.body.deepTheme,'人間関係');assert.equal(s.requested.body.deepAction,'finish');assert.equal(s.requested.body.modeStart,false);
+ assert.equal(s.requested.body.message,vm.runInContext('DEEP_FINISH_MESSAGE',s.context));assert.equal(s.requested.body.mindMap,null);assert.equal(s.requested.body.memoryId,undefined);assert.equal(s.requested.body.attachment,undefined);
+ assert.equal(vm.runInContext('deepExploration',s.context),true);assert.equal(s.element('messageInput').value,'まだ送らない下書き');
+ s.element('messageInput').value='待っている間に直した下書き';s.respond();await s.context.completed;
+ assert.equal(vm.runInContext('deepExploration',s.context),false);assert.equal(vm.runInContext('deepTheme',s.context),'');assert.equal(vm.runInContext(guest?'trialPending':'pending',s.context),null);
+ assert.equal(s.element('messageInput').value,'待っている間に直した下書き');assert.equal(vm.runInContext('selectedMemory.id',s.context),'memory');assert.equal(vm.runInContext('attachedPdf.id',s.context),'pdf');
+ assert.match(s.element('status').textContent,/振り返りを会話に残しました/);assert.equal(s.deep.closes,1);
+});
+
+for(const guest of [false,true])test('failed deep finish retains the theme and retries its request without sending the draft: guest='+guest,async()=>{
+ const s=setup();s.element('messageInput').value='下書き';vm.runInContext("deepExploration=true;deepTheme='仕事';selfReturn=false;",s.context);
+ if(guest)vm.runInContext('session=null;trialReady=true;loadTrial=async()=>{};',s.context);
+ s.deep.handlers.onFinish();await new Promise(resolve=>setImmediate(resolve));const first=s.requested.body.requestId;
+ s.fail();await assert.rejects(s.context.completed,/応答を取得できませんでした/);
+ assert.equal(vm.runInContext('deepExploration',s.context),true);assert.equal(vm.runInContext('deepTheme',s.context),'仕事');assert.equal(s.element('messageInput').value,'下書き');assert.equal(s.deep.closes,0);
+ s.element('messageInput').value='修正した下書き';s.deep.handlers.onFinish();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(s.requested.body.requestId,first);assert.equal(s.requested.body.deepAction,'finish');assert.notEqual(s.requested.body.message,'修正した下書き');
+ s.respond();await s.context.completed;assert.equal(vm.runInContext('deepExploration',s.context),false);assert.equal(s.element('messageInput').value,'修正した下書き');
+});
+
+for(const action of ['start','finish'])test('saved deep '+action+' restores the pending request identity after reload',async()=>{
+ const s=setup();let saved;s.context.sessionStorage.setItem=(key,value)=>{saved=JSON.parse(value);};
+ vm.runInContext("rememberDraft=originalRememberDraft;deepExploration=true;deepTheme='仕事';selfReturn=false;",s.context);s.element('messageInput').value='再読込しても送らない下書き';
+ if(action==='start')s.deep.handlers.onStart('仕事');else s.deep.handlers.onFinish();
+ await new Promise(resolve=>setImmediate(resolve));const first=s.requested.body.requestId;
+ s.fail();await assert.rejects(s.context.completed,/応答を取得できませんでした/);
+ assert.equal(saved.pending.requestId,first);assert.equal(saved.pending.mapKey,'null');assert.equal(saved.deepTheme,'仕事');
+ const restored=await restoreSavedDraft(saved);
+ assert.equal(vm.runInContext('activeId',restored.context),'chat');assert.equal(vm.runInContext('deepTheme',restored.context),'仕事');assert.equal(restored.element('messageInput').value,'再読込しても送らない下書き');
+ if(action==='start')restored.deep.handlers.onStart('仕事');else restored.deep.handlers.onFinish();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(restored.requested.body.requestId,first);assert.equal(restored.requested.body.deepTheme,'仕事');assert.equal(restored.requested.body.modeStart,action==='start');assert.equal(restored.requested.body.deepAction,action==='finish'?'finish':undefined);
+ restored.respond();await restored.context.completed;assert.equal(restored.element('messageInput').value,'再読込しても送らない下書き');
+});
+
+test('legacy activation draft without map or deep fields retries its existing request after reload',async()=>{
+ const s=setup();let saved;s.context.sessionStorage.setItem=(key,value)=>{saved=JSON.parse(value);};s.element('messageInput').value='以前の下書き';
+ vm.runInContext('rememberDraft=originalRememberDraft;submitMessage(true);',s.context);await new Promise(resolve=>setImmediate(resolve));const first=s.requested.body.requestId;
+ s.fail();await assert.rejects(s.context.completed,/応答を取得できませんでした/);
+ delete saved.pending.mapKey;delete saved.pending.deepTheme;delete saved.pending.deepAction;delete saved.deepTheme;
+ const restored=await restoreSavedDraft(saved);vm.runInContext('submitMessage(true)',restored.context);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(restored.requested.body.requestId,first);assert.equal(restored.requested.body.selfReturn,true);assert.equal(restored.requested.body.modeStart,true);
+ restored.respond();await restored.context.completed;assert.equal(restored.element('messageInput').value,'以前の下書き');
+});
+
+test('guest finish remains completed when refreshing its saved history fails',async()=>{
+ const s=setup();s.element('messageInput').value='まだ送らない下書き';
+ vm.runInContext("session=null;trialReady=true;deepExploration=true;deepTheme='仕事';selfReturn=false;loadTrial=async()=>{throw Error('history unavailable');};",s.context);
+ s.deep.handlers.onFinish();await new Promise(resolve=>setImmediate(resolve));s.respond({saved:true,reply:'今回の振り返り',remaining:3});
+ await assert.rejects(s.context.completed,/振り返りは保存され、自己探索を終了しました/);
+ assert.equal(vm.runInContext('deepExploration',s.context),false);assert.equal(vm.runInContext('deepTheme',s.context),'');assert.equal(vm.runInContext('trialPending',s.context),null);assert.equal(vm.runInContext('trialRemaining',s.context),3);
+ assert.equal(s.element('messageInput').value,'まだ送らない下書き');assert.equal(s.deep.closes,1);
+ s.deep.handlers.onFinish();await new Promise(resolve=>setImmediate(resolve));assert.equal(s.requests.length,1);
+});
+
+test('deep feedback is editable composer text and never sends automatically',()=>{
+ const s=setup();vm.runInContext("deepExploration=true;deepTheme='家族';selfReturn=false;",s.context);
+ s.deep.handlers.onFeedback('少し近いです。');assert.equal(s.element('messageInput').value,'少し近いです。');assert.equal(s.requests.length,0);
+ s.element('messageInput').value='自分の言葉';s.deep.handlers.onFeedback('まだ分かりません。');
+ assert.equal(s.element('messageInput').value,'自分の言葉\nまだ分かりません。');assert.equal(s.requests.length,0);
+ s.element('messageInput').value='長'.repeat(4000);s.deep.handlers.onFeedback('違います。');assert.equal(s.element('messageInput').value.length,4000);assert.match(s.element('status').textContent,/いっぱい/);
+ for(const state of ['busy=true;','busy=false;input.disabled=true;','input.disabled=false;deepExploration=false;']){
+  s.element('messageInput').value='保持';vm.runInContext(state,s.context);s.deep.handlers.onFeedback('追加');assert.equal(s.element('messageInput').value,'保持');
+ }
+ assert.equal(s.requests.length,0);
+});
+
+test('deep feedback controls follow only the latest feeling-check reply',()=>{
+ const s=setup();vm.runInContext("deepExploration=true;deepTheme='仕事';selfReturn=false;rows=[{role:'assistant',content:'気持ちを確かめる\\nまだ仮の見方です。'}];originalControls();",s.context);
+ assert.equal(s.deep.updates.at(-1).active,true);assert.equal(s.deep.updates.at(-1).theme,'仕事');assert.equal(s.deep.updates.at(-1).feedback,true);
+ vm.runInContext("rows.push({role:'user',content:'違います'});originalControls();",s.context);assert.equal(s.deep.updates.at(-1).feedback,false);
+ vm.runInContext("rows.push({role:'assistant',content:'場面をたどる\\nそのときのことを教えてください。'});originalControls();",s.context);assert.equal(s.deep.updates.at(-1).feedback,false);
+});
+
+test('deep theme and draft survive serialization and ordinary exit clears only the mode state',()=>{
+ const s=setup();let saved;s.context.sessionStorage.setItem=(key,value)=>{saved=JSON.parse(value);};s.element('messageInput').value='未送信の文章';
+ vm.runInContext("deepExploration=true;deepTheme='これから';selfReturn=false;",s.context);
+ vm.runInContext('rememberDraft=originalRememberDraft;rememberDraft();',s.context);
+ assert.equal(saved.deepExploration,true);assert.equal(saved.deepTheme,'これから');assert.equal(saved.text,'未送信の文章');
+ s.element('endDeepExploration').onclick();assert.equal(saved.deepExploration,false);assert.equal(saved.deepTheme,'');assert.equal(saved.text,'未送信の文章');
+});
+
+test('new conversation and existing conversation selection clear the deep theme',async()=>{
+ for(const target of ['new','history']){
+  const s=setup();vm.runInContext("deepExploration=true;deepTheme='家族';selfReturn=false;",s.context);
+  if(target==='new')s.element('newChat').onclick();
+  else{vm.runInContext("chats=[{id:'other',title:'別の会話'}];renderHistory();",s.context);s.element('history').children[0].onclick();await s.context.completed;}
+  assert.equal(vm.runInContext('deepExploration',s.context),false,target);assert.equal(vm.runInContext('deepTheme',s.context),'',target);assert.equal(s.deep.closes,1,target);
+  assert.equal(vm.runInContext('activeId',s.context),target==='new'?null:'other');assert.equal(s.requests.length,0);
+ }
+});
+
+test('new conversation immediately refreshes deep controls with no active mode or conversation context',()=>{
+ const s=setup();vm.runInContext("controls=originalControls;deepExploration=true;deepTheme='家族';selfReturn=false;rows=[{role:'user',content:'家族の話'}];controls();",s.context);
+ assert.equal(s.deep.updates.at(-1).active,true);assert.equal(s.deep.updates.at(-1).hasContext,true);
+ s.element('newChat').onclick();const state=s.deep.updates.at(-1);
+ assert.equal(state.active,false);assert.equal(state.theme,'');assert.equal(state.hasContext,false);assert.equal(s.element('deepExplorationState').hidden,true);assert.equal(s.requests.length,0);
+});
+
+test('changing account clears the deep theme and closes its dialog',async()=>{
+ const s=setup();vm.runInContext("deepExploration=true;deepTheme='家族';selfReturn=false;loadTrial=async()=>{};globalThis.sessionChanged=changeSession(null);",s.context);await s.context.sessionChanged;
+ assert.equal(vm.runInContext('deepExploration',s.context),false);assert.equal(vm.runInContext('deepTheme',s.context),'');assert.equal(s.deep.closes,1);assert.equal(s.requests.length,0);
+});
+
+test('guest can leave deep exploration after quota runs out without a request or login dialog',()=>{
+ const s=setup();let loginOpened=false;s.element('authDialog').showModal=()=>{loginOpened=true;};s.element('messageInput').value='残しておく';
+ vm.runInContext("session=null;trialReady=true;trialRemaining=0;deepExploration=true;deepTheme='仕事';selfReturn=false;originalControls();",s.context);
+ assert.equal(s.deep.updates.at(-1).canSend,false);assert.equal(s.element('endDeepExploration').disabled,false);
+ s.element('endDeepExploration').onclick();assert.equal(vm.runInContext('deepExploration',s.context),false);assert.equal(vm.runInContext('deepTheme',s.context),'');
+ assert.equal(s.element('messageInput').value,'残しておく');assert.equal(s.requests.length,0);assert.equal(loginOpened,false);
 });
 
 test('pattern activation and exit preserve conversation, selected memory and draft',async()=>{
@@ -137,7 +296,7 @@ test('other modes exit pattern and mode label reflects selection',()=>{
  for(const id of ['deepExploration','selfReturn','skyGazing','emotionFocus','blindSpot','returnPath','seikanMode']){
  const s=setup();vm.runInContext('patternExploration=true;selfReturn=false;originalControls();submitMessage=()=>{};',s.context);
  assert.equal(s.element('deepExplorationLabel').textContent,'自己探索 ＞ パターンを見る');
- s.element(id).onclick();assert.equal(vm.runInContext('patternExploration',s.context),false);
+ s.element(id).onclick();if(id==='deepExploration')s.deep.handlers.onStart('人間関係');assert.equal(vm.runInContext('patternExploration',s.context),false);
  }
 });
 
@@ -162,7 +321,7 @@ test('other modes exit direction and mode label reflects selection',()=>{
  for(const id of ['patternExploration','deepExploration','selfReturn','skyGazing','emotionFocus','blindSpot','returnPath','seikanMode']){
  const s=setup();vm.runInContext('directionExploration=true;selfReturn=false;originalControls();submitMessage=()=>{};',s.context);
  assert.equal(s.element('deepExplorationLabel').textContent,'自己探索 ＞ 方角を見る');
- s.element(id).onclick();assert.equal(vm.runInContext('directionExploration',s.context),false);
+ s.element(id).onclick();if(id==='deepExploration')s.deep.handlers.onStart('人間関係');assert.equal(vm.runInContext('directionExploration',s.context),false);
  }
 });
 
@@ -176,9 +335,7 @@ test('direction guest activation uses the existing guest endpoint and preserves 
 test('direction survives draft serialization and switching to pattern clears it',()=>{
  const s=setup();let saved;s.context.sessionStorage.setItem=(key,value)=>{saved=JSON.parse(value);};
  vm.runInContext("directionExploration=true;selfReturn=false;submitMessage=()=>{};",s.context);
- // Run the original serializer, which setup replaces only to isolate other tests.
- const serializer=source.slice(source.indexOf('function rememberDraft()'),source.indexOf('async function copyAnswerText'));
- vm.runInContext(serializer+'\nrememberDraft();',s.context);assert.equal(saved.directionExploration,true);
+ vm.runInContext('rememberDraft=originalRememberDraft;rememberDraft();',s.context);assert.equal(saved.directionExploration,true);
  s.element('patternExploration').onclick();assert.equal(vm.runInContext('directionExploration',s.context),false);assert.equal(saved.directionExploration,false);assert.equal(saved.patternExploration,true);
 });
 

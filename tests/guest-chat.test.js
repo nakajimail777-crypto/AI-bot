@@ -45,18 +45,18 @@ test('database enforces five completed turns, leases, retries, isolation and per
   assert.equal(blocked.code,'TRIAL_NETWORK_LIMIT');
  }finally{await db.close();}
 });
-function setup({code,providerFailure=false}={}){
+function setup({code,providerFailure=false,priorMessage=null,history,reply='reply'}={}){
  const calls=[];
  const fetcher=async(url,init)=>{
   const body=init.body?JSON.parse(init.body):null;calls.push({url,body});let data={},status=200;
   if(url.includes('rpc/trial_chat')){
-   if(body.p_action==='reserve')data=code?{code,error:'blocked'}:{remaining:5,rows:[{role:'user',content:'earlier question'},{role:'assistant',content:'earlier answer'}]};
+   if(body.p_action==='reserve')data=code?{code,error:'blocked'}:priorMessage!==null?(body.p_message===priorMessage?{cached:true,reply:'saved reply',remaining:4}:{code:'TRIAL_CONFLICT',error:'changed'}):{remaining:5,rows:history||[{role:'user',content:'earlier question'},{role:'assistant',content:'earlier answer'}]};
    else if(body.p_action==='finish')data={reply:body.p_reply,remaining:4};
    else data={rows:[],remaining:5};
   }else if(url.includes('ai_personas'))data=[{instructions:'スピリットドラゴン'}];
   else if(url.includes(':embedContent'))data={embedding:{values:Array(768).fill(.1)}};
   else if(url.includes('match_knowledge'))data=[{title:'本棚',content:'reference'}];
-  else if(url.includes(':generateContent')){data={candidates:[{content:{parts:[{text:'reply'}]}}]};if(providerFailure)status=429;}
+   else if(url.includes(':generateContent')){data={candidates:[{content:{parts:[{text:reply}]}}]};if(providerFailure)status=429;}
   return new Response(JSON.stringify(data),{status});
  };
  return {calls,invoke:async(overrides={})=>{const res=response();await createGuestHandler({env,fetcher})({method:'POST',headers:{host:'site.test',origin:'https://site.test'},body:{message:'hello',requestId:randomUUID(),seikanMode:true},...overrides},res);return res;}};
@@ -121,6 +121,56 @@ test('guest deep mode uses existing history and a single generation',async()=>{
  assert.equal(models[0].body.contents[0].parts[0].text,'earlier question');
  assert.match(models[0].body.systemInstruction.parts[0].text,/自己探索：深く降りる/);
  assert.equal(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,'［深く降りるを選択］');
+});
+for(const modeStart of [true,false])test('guest deep theme is user data, scoped guidance and part of the reserved message: '+modeStart,async()=>{
+ const s=setup(),deepTheme='仕事と人との関係';
+ const r=await s.invoke({body:{message:modeStart?'':'まだ分からない',requestId:randomUUID(),deepExploration:true,deepTheme:' '+deepTheme+' ',modeStart}});
+ assert.equal(r.code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);
+ const generated=models[0].body;
+ assert.ok(generated.contents.at(-1).parts[0].text.includes(JSON.stringify({theme:deepTheme})));
+ assert.ok(!generated.systemInstruction.parts[0].text.includes(deepTheme));
+ assert.equal(generated.contents[0].parts[0].text,'earlier question');
+ assert.ok(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message.includes('［自己探索のテーマ：'+JSON.stringify(deepTheme)+'］'));
+ assert.ok(!s.calls.some(c=>c.url.includes(':embedContent')));
+});
+test('guest deep finish summarizes once and releases its lease if generation fails',async()=>{
+ const body={message:'今日はここまで。今回話したことを短く振り返ってください。',requestId:randomUUID(),deepExploration:true,deepTheme:'仕事',deepAction:'finish'};
+ const s=setup();assert.equal((await s.invoke({body})).code,200);
+ const models=s.calls.filter(c=>c.url.includes(':generateContent'));assert.equal(models.length,1);
+ assert.match(models[0].body.systemInstruction.parts[0].text,/今回の依頼：自己探索を終えて短く振り返る/);
+ assert.match(s.calls.find(c=>c.body?.p_action==='reserve').body.p_message,/［深く降りるの振り返りを希望］$/);
+ const failure=setup({providerFailure:true});assert.equal((await failure.invoke({body})).code,429);
+ assert.ok(!failure.calls.some(c=>c.body?.p_action==='finish'));
+ const reserved=failure.calls.find(c=>c.body?.p_action==='reserve').body,release=failure.calls.find(c=>c.body?.p_action==='fail').body;
+ assert.equal(reserved.p_request,release.p_request);assert.equal(reserved.p_lease,release.p_lease);
+});
+test('guest invalid deep metadata cannot reserve a turn or call a provider',async()=>{
+ for(const extra of [{deepTheme:''},{deepTheme:'仕事'},{deepAction:'finish'},{deepExploration:true,deepTheme:null},{deepExploration:true,deepTheme:'あ'.repeat(81)},{deepExploration:true,deepTheme:'仕事\n'},{deepExploration:true,deepAction:'other'},{deepExploration:true,modeStart:true,deepAction:'finish'}]){
+  const s=setup();const r=await s.invoke({body:{message:extra.modeStart?'':'確認',requestId:randomUUID(),...extra}});
+  assert.equal(r.code,400);assert.equal(s.calls.length,0);
+ }
+});
+test('guest retries keep theme and finish intent in the database comparison',async()=>{
+ const body={message:'今日はここまで。今回話したことを短く振り返ってください。',requestId:randomUUID(),deepExploration:true,deepTheme:'仕事',deepAction:'finish'};
+ const initial=setup();assert.equal((await initial.invoke({body})).code,200);
+ const priorMessage=initial.calls.find(c=>c.body?.p_action==='reserve').body.p_message;
+ const same=setup({priorMessage});const retried=await same.invoke({body:{...body,deepTheme:' 仕事 '}});
+ assert.equal(retried.code,200);assert.equal(retried.body.reply,'saved reply');
+ assert.ok(!same.calls.some(c=>c.url.includes(':generateContent')));
+ for(const extra of [{deepTheme:'人との関係'},{deepAction:undefined}]){
+  const changed=setup({priorMessage});const r=await changed.invoke({body:{...body,...extra}});
+  assert.equal(r.code,409);assert.equal(r.body.code,'TRIAL_CONFLICT');
+  assert.ok(!changed.calls.some(c=>c.url.includes(':generateContent')));
+ }
+});
+test('guest leaving deep exploration does not continue theme or finish instructions',async()=>{
+ const s=setup({history:[{role:'user',content:'今日はここまで\n\n［深く降りる］\n［自己探索のテーマ："仕事"］\n［深く降りるの振り返りを希望］'},{role:'assistant',content:'まだ分からないままです。'}]});
+ assert.equal((await s.invoke({body:{message:'今日の予定を整理したい',requestId:randomUUID()}})).code,200);
+ const generated=s.calls.find(c=>c.url.includes(':generateContent')).body;
+ assert.match(generated.systemInstruction.parts[0].text,/自己探索の終了/);
+ assert.doesNotMatch(generated.systemInstruction.parts[0].text,/【自己探索：深く降りる】|今回の依頼：自己探索を終えて短く振り返る/);
+ assert.equal(generated.contents.at(-1).parts[0].text,'今日の予定を整理したい');
 });
 
 for(const modeStart of [true,false])test('guest pattern uses same scoped rules: '+modeStart,async()=>{

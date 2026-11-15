@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {calculateUsage} from '../lib/pricing.js';
 import {randomUUID} from 'node:crypto';
 import {previewReply} from '../lib/preview-example-replies.js';
+import {deepMessage} from '../lib/deep-exploration.js';
 const user='11111111-1111-4111-8111-111111111111';
 const conversation='22222222-2222-4222-8222-222222222222';
 const request='33333333-3333-4333-8333-333333333333';
@@ -40,10 +41,21 @@ const server=http.createServer(async(req,res)=>{
  const provider=data.provider==='openai'?'openai':'gemini';
  if(data.message.includes('429'))return json(res,{error:'今はAIへのアクセスが集中しています。約3秒待ってから、もう一度お試しください。入力した内容は残っています。',code:'AI_RATE_LIMIT',retryAfterSeconds:3},429);
  if(data.message.includes('待機'))await new Promise(resolve=>setTimeout(resolve,1500));
- const reply=`【${provider==='openai'?'OpenAI':'Gemini'}の模擬応答】\n`+previewReply(data.message);
+ const label=`【${provider==='openai'?'OpenAI':'Gemini'}の模擬応答】`;
+ let reply=label+'\n'+previewReply(data.message);
+ if(data.deepExploration){
+  const theme=data.deepTheme||'今の話題';
+  reply=data.deepAction==='finish'
+   ? `最初に気になっていたこと：${theme}\n話してみて気づいた気持ち：この表示確認では確定していません。\nまだ分からないこと：本人の言葉で、あとから直せます。\n\n${label}`
+   : data.modeStart
+    ? `「${theme}」について、最近なんとなく心に残っている場面はありますか？\n\n${label}`
+    : /近い|違い|分かりません/.test(data.message)
+     ? `今の返事を受け取りました。その場面のどの部分が、今も心に残っていますか？\n\n${label}`
+     : `気持ちを確かめる\nこれは画面確認用の仮説です。人と会いたい気持ちと、自分の時間を取っておきたい気持ちが、両方あるという捉え方は近いですか？\n\n${label}`;
+ }
  const target=url.pathname==='/api/guest-chat'?guestRows:rows;
  if(!receipts.has(data.requestId)){
- target.push({id:data.requestId,conversation_id:data.conversationId,user_id:user,role:'user',content:data.message,sequence:target.length+1});
+ target.push({id:data.requestId,conversation_id:data.conversationId,user_id:user,role:'user',content:data.deepExploration?deepMessage(data.message,data.modeStart,{theme:data.deepTheme||'',action:data.deepAction||''}):data.message,sequence:target.length+1});
  target.push({id:randomUUID(),conversation_id:data.conversationId,user_id:user,role:'assistant',reply_to:data.requestId,content:reply,provider,model:models[provider],sequence:target.length+1});
  receipts.set(data.requestId,makeUsage(provider));}
  return json(res,{reply,requestId:data.requestId,saved:true,provider,model:models[provider],usage:receipts.get(data.requestId),remaining:Math.max(0,5-guestRows.length/2)});

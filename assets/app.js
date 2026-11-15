@@ -41,14 +41,15 @@ async function readTrial(version){
  rows=data.rows||[];trialRemaining=data.remaining;trialReady=true;
  renderMessages();renderHistory();controls();
 }
-async function sendTrial(modeStart=false){
+async function sendTrial(modeStart=false,deepAction=''){
  if(!trialReady||trialRemaining<=0){$('authDialog').showModal();return;}
- const sentDraft=input.value,text=modeStart?'':sentDraft.trim(),version=epoch,replyVersion=++responseVersion,provider=aiProvider.get();
- const mindMap=modeStart?null:(globalThis.getDragonMindMapContext?.(text)||null),mapKey=JSON.stringify(mindMap);
+ const controlTurn=modeStart||deepAction==='finish';
+ const sentDraft=input.value,text=modeStart?'':deepAction==='finish'?DEEP_FINISH_MESSAGE:sentDraft.trim(),version=epoch,replyVersion=++responseVersion,provider=aiProvider.get();
+ const mindMap=controlTurn?null:(globalThis.getDragonMindMapContext?.(text)||null),mapKey=JSON.stringify(mindMap);
  if(text.length>4000)throw new Error('メッセージは4,000文字以内で入力してください。');
- if(!trialPending||trialPending.provider!==provider||trialPending.text!==text||trialPending.mode!==seikanMode||trialPending.blindSpot!==blindSpot||trialPending.emotionFocus!==emotionFocus||trialPending.encouragement!==encouragement||trialPending.returnPath!==returnPath||trialPending.skyGazing!==skyGazing||trialPending.selfReturn!==selfReturn||trialPending.deepExploration!==deepExploration||trialPending.patternExploration!==patternExploration||trialPending.directionExploration!==directionExploration||trialPending.modeStart!==modeStart||trialPending.mapKey!==mapKey)trialPending={provider,text,mode:seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,mapKey,id:crypto.randomUUID()};
+ if(!trialPending||trialPending.provider!==provider||trialPending.text!==text||trialPending.mode!==seikanMode||trialPending.blindSpot!==blindSpot||trialPending.emotionFocus!==emotionFocus||trialPending.encouragement!==encouragement||trialPending.returnPath!==returnPath||trialPending.skyGazing!==skyGazing||trialPending.selfReturn!==selfReturn||trialPending.deepExploration!==deepExploration||trialPending.deepTheme!==deepTheme||trialPending.deepAction!==deepAction||trialPending.patternExploration!==patternExploration||trialPending.directionExploration!==directionExploration||trialPending.modeStart!==modeStart||trialPending.mapKey!==mapKey)trialPending={provider,text,mode:seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,deepTheme,deepAction,patternExploration,directionExploration,modeStart,mapKey,id:crypto.randomUUID()};
  status(aiProvider.label()+'が返答を考えています…');replyWaiting(true);
- const response=await fetch('/api/guest-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,message:text,requestId:trialPending.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,mindMap}),signal:AbortSignal.timeout(85000)});
+ const response=await fetch('/api/guest-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,message:text,requestId:trialPending.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,...(deepExploration?{deepTheme,...(deepAction?{deepAction}:{})}:{}),patternExploration,directionExploration,modeStart,mindMap}),signal:AbortSignal.timeout(85000)});
  const data=await response.json();
  if(version!==epoch||session||replyVersion!==responseVersion)return;
  if(!response.ok){
@@ -57,9 +58,12 @@ async function sendTrial(modeStart=false){
  }
  const receipt={...data.usage,provider:data.usage?.provider||data.provider,model:data.usage?.model||data.model,replySource:data.replySource||data.usage?.replySource};
  if(data.usage||data.provider||data.replySource)usageCache.set(data.requestId||trialPending.id,receipt);
- encouragement=false;blindSpot=false;returnPath=false;trialRemaining=data.remaining;if(!modeStart&&input.value===sentDraft)input.value='';trialPending=null;
- await loadTrial();
- if(version!==epoch||session||replyVersion!==responseVersion)return;
+ encouragement=false;blindSpot=false;returnPath=false;trialRemaining=data.remaining;if(!controlTurn&&input.value===sentDraft)input.value='';trialPending=null;
+ let completionVersion=replyVersion;
+ if(deepAction==='finish'){leaveSelfReturn();completionVersion=responseVersion;}
+ try {await loadTrial();}
+ catch(error){if(deepAction==='finish')throw new Error('振り返りは保存され、自己探索を終了しました。表示を更新するため、ページを再読み込みしてください。');throw error;}
+ if(version!==epoch||session||completionVersion!==responseVersion)return;
  // The guest history has no request IDs. Only associate a freshly finished
  // response with its quota-defined position when its exact text also matches.
  const completedIndex=(5-data.remaining)*2-1,completedRow=rows[completedIndex];
@@ -67,7 +71,7 @@ async function sendTrial(modeStart=false){
   completedRow.usage=receipt;renderMessages();
  }
  $('conversation').scrollTop=$('conversation').scrollHeight;
- status(trialRemaining>0?'あと'+trialRemaining+'回お試しいただけます。':'5往復のお試しが終わりました。ログインすると新しい会話を始められます。');
+ status(deepAction==='finish'?'振り返りを会話に残しました。言葉が違うところは、続けて直せます。':trialRemaining>0?'あと'+trialRemaining+'回お試しいただけます。':'5往復のお試しが終わりました。ログインすると新しい会話を始められます。');
 }
 let deleteTarget = null;
 let blindSpot=false;
@@ -76,26 +80,40 @@ let encouragement=false;
 let returnPath=false;
 let skyGazing=false;
 let deepExploration=false;
+let deepTheme='';
+const DEEP_FINISH_MESSAGE='今日はここまで。今回話したことを短く振り返ってください。';
 let patternExploration=false;
 let directionExploration=false;
 let selfReturn=false, responseVersion=0;
-function leaveSelfReturn(){deepExploration=false;patternExploration=false;directionExploration=false;selfReturn=false;responseVersion++;}
+function leaveSelfReturn(){deepExploration=false;deepTheme='';patternExploration=false;directionExploration=false;selfReturn=false;responseVersion++;deepUI.close();}
+const deepUI=DragonDeepExploration.create({
+ onStart(theme){
+  if(busy||planBusy||!ready||pdfReading||!aiProvider.available()||Date.now()<cooldownUntil||(!session&&(!trialReady||trialRemaining<=0)))return;
+  const reusePending=deepExploration&&deepTheme===theme&&(pending?.modeStart||trialPending?.modeStart);
+  leaveSelfReturn();deepExploration=true;deepTheme=theme;
+  seikanMode=false;emotionFocus=false;blindSpot=false;encouragement=false;returnPath=false;skyGazing=false;
+  if(!reusePending){pending=null;trialPending=null;}
+  rememberDraft();controls();explorationMenu.open=false;submitMessage(true);input.focus();
+ },
+ onFinish(){if(deepExploration)submitMessage(false,'finish');},
+ onFeedback(text){
+  if(!deepExploration||busy||input.disabled)return;
+  const next=input.value.trim()?input.value+'\n'+text:text;
+  if(next.length>4000){status('入力欄がいっぱいです。文章を短くしてから選んでください。',true);return;}
+  input.value=next;rememberDraft();controls();input.focus();status('入力欄に入れました。言葉を足したり直したりして送信できます。');
+ }
+});
 $('selfReturn').onclick=()=>{
  if(busy||!ready)return;
- deepExploration=false;patternExploration=false;directionExploration=false;selfReturn=!selfReturn;responseVersion++;pending=null;trialPending=null;
+ const enable=!selfReturn;leaveSelfReturn();selfReturn=enable;pending=null;trialPending=null;
  seikanMode=false;emotionFocus=false;blindSpot=false;encouragement=false;returnPath=false;skyGazing=false;
  rememberDraft();controls();
  if(selfReturn){submitMessage(true);input.focus();}
  else status('自分に戻るモードをOFFにしました。');
 };
 $('deepExploration').onclick=()=>{
- if(busy||!ready||pdfReading||Date.now()<cooldownUntil)return;
- const enable=!deepExploration;leaveSelfReturn();deepExploration=enable;
- seikanMode=false;emotionFocus=false;blindSpot=false;encouragement=false;returnPath=false;skyGazing=false;
- pending=null;trialPending=null;rememberDraft();controls();
- document.querySelector('.exploration-menu').open=false;
- if(enable)submitMessage(true);else status('通常対話に戻りました。');
- input.focus();
+ if(busy||planBusy||!ready||pdfReading||!aiProvider.available()||Date.now()<cooldownUntil)return;
+ explorationMenu.open=false;deepUI.open({hasContext:rows.some(row=>row.role==='user')});
 };
 $('patternExploration').onclick=()=>{
  if(busy||!ready||pdfReading||Date.now()<cooldownUntil)return;
@@ -179,9 +197,12 @@ function controls() {
   $('patternExploration').setAttribute('aria-pressed',String(patternExploration));
   $('directionExploration').disabled=$('deepExploration').disabled;
   $('directionExploration').setAttribute('aria-pressed',String(directionExploration));
-  $('deepExplorationLabel').textContent=directionExploration?'自己探索 ＞ 方角を見る':patternExploration?'自己探索 ＞ パターンを見る':'自己探索 ＞ 深く降りる';
+ $('deepExplorationLabel').textContent=directionExploration?'自己探索 ＞ 方角を見る':patternExploration?'自己探索 ＞ パターンを見る':'自己探索中：'+(deepTheme||'今の話題');
   $('deepExplorationState').hidden=!(deepExploration||patternExploration||directionExploration);
   $('endDeepExploration').disabled=busy;
+  const deepCanSend=ready&&!busy&&!planBusy&&!pdfReading&&aiProvider.available()&&(!!session||(trialReady&&trialRemaining>0))&&Date.now()>=cooldownUntil;
+  const latestReply=rows.at(-1);
+  deepUI.update({active:deepExploration,theme:deepTheme,canStart:deepCanSend,canSend:deepCanSend,busy,hasContext:rows.some(row=>row.role==='user'),feedback:latestReply?.role==='assistant'&&/^\s*(?:#{1,3}\s*)?(?:\*\*)?気持ちを確かめる(?:\*\*)?[：:]?\s*(?:\r?\n|$)/.test(latestReply.content)});
   if (ready && !busy && incomingNumbers) {
     document.dispatchEvent(new Event('dragon-chat-change'));
     const entry = incomingNumbers;
@@ -264,7 +285,7 @@ function controls() {
 }
 function rememberDraft() {
   if (!session) return;
-  try { sessionStorage.setItem(storageKey(),JSON.stringify({ activeId, provider:aiProvider.get(), text:input.value, pending:pending?{...pending,mapKey:undefined}:null, cooldownUntil, seikanMode, blindSpot, emotionFocus, encouragement, returnPath, skyGazing, selfReturn, deepExploration, patternExploration, directionExploration, selectedMemory })); } catch {}
+  try { sessionStorage.setItem(storageKey(),JSON.stringify({ activeId, provider:aiProvider.get(), text:input.value, pending:pending?{...pending,mapKey:(pending.modeStart||pending.deepAction==='finish')?'null':undefined}:null, cooldownUntil, seikanMode, blindSpot, emotionFocus, encouragement, returnPath, skyGazing, selfReturn, deepExploration, deepTheme, patternExploration, directionExploration, selectedMemory })); } catch {}
 }
 async function copyAnswerText(value) {
   try {
@@ -322,7 +343,9 @@ function renderMessages() {
     const inner=document.createElement('div'); inner.className='welcome-inner';
     const h=document.createElement('h1'); h.textContent='なんでもない話から、はじめよう。';
     const p=document.createElement('p'); p.textContent=session?'考えごとも、思いつきも、今日見た空のことも。':'考えごとも、思いつきも、今日見た空のことも。ログインせずに5往復までお話しできます。';
-    inner.append(h,p); welcome.append(inner); messages.append(welcome);
+    const entry=document.createElement('button');entry.id='startDeepExploration';entry.type='button';entry.className='deep-welcome-start';entry.textContent='テーマから自分を知る';
+    const note=document.createElement('p');note.className='deep-welcome-note';note.textContent='小さな出来事から、今の気持ちを一緒に探ります。';
+    inner.append(h,p,entry,note); welcome.append(inner); messages.append(welcome);
   }
   for (const row of rows) {
     const block=document.createElement('div'); block.className=`message-row ${row.role}`;
@@ -404,6 +427,7 @@ async function changeSession(next) {
       directionExploration=draft.directionExploration===true;
       patternExploration=!directionExploration&&draft.patternExploration===true;
       deepExploration=!directionExploration&&!patternExploration&&draft.deepExploration===true;if(deepExploration||patternExploration||directionExploration){seikanMode=false;emotionFocus=false;blindSpot=false;encouragement=false;returnPath=false;skyGazing=false;}
+      deepTheme=deepExploration&&typeof draft.deepTheme==='string'&&draft.deepTheme.length<=80&&!/[\x00-\x1f\x7f]/.test(draft.deepTheme)?draft.deepTheme.trim():'';
       selfReturn=!directionExploration&&!patternExploration&&!deepExploration&&draft.selfReturn===true;if(selfReturn){seikanMode=false;emotionFocus=false;blindSpot=false;encouragement=false;returnPath=false;skyGazing=false;}
       cooldownUntil=Number.isFinite(draft.cooldownUntil)?Math.min(draft.cooldownUntil,Date.now()+86400000):0;
       if(draft.activeId){
@@ -412,7 +436,15 @@ async function changeSession(next) {
         if(version!==epoch)return;
         if(data){activeId=data.id;await loadMessages();}
       }
-      if(!draft.activeId||activeId===draft.activeId){input.value=draft.text||'';pending=draft.pending||null;if(pending&&(pending.provider||'gemini')!==aiProvider.get())pending=null;}
+      if(!draft.activeId||activeId===draft.activeId){
+        input.value=draft.text||'';pending=draft.pending||null;
+        if(pending&&(pending.provider||'gemini')!==aiProvider.get())pending=null;
+        if(pending){
+          pending.deepTheme=typeof pending.deepTheme==='string'?pending.deepTheme:'';
+          pending.deepAction=pending.deepAction==='finish'?'finish':'';
+          if(pending.modeStart||pending.deepAction==='finish')pending.mapKey='null';
+        }
+      }
     }
     if(version!==epoch)return;
     renderHistory();
@@ -472,28 +504,30 @@ $('closeMemories').onclick=()=>$('memoriesDialog').close();
 $('refreshMemories').onclick=()=>run(()=>loadMemories());
 $('moreMemories').onclick=()=>run(()=>loadMemories(true));
 
-function submitMessage(modeStart=false){
-  if(busy||planBusy||!aiProvider.available()||pdfReading||(!modeStart&&!input.value.trim()&&!attachedPdf)||Date.now()<cooldownUntil)return;
+function submitMessage(modeStart=false,deepAction=''){
+  const controlTurn=modeStart||deepAction==='finish';
+  if(deepAction&&(!deepExploration||deepAction!=='finish'||modeStart))return;
+  if(busy||planBusy||!aiProvider.available()||pdfReading||(!controlTurn&&!input.value.trim()&&!attachedPdf)||Date.now()<cooldownUntil)return;
   run(async()=>{
-    if(!session){await sendTrial(modeStart);return;}
-    const sentDraft=input.value, text=modeStart?'':(sentDraft.trim() || '添付したPDFの内容を要約してください。'), version=epoch, replyVersion=++responseVersion,provider=aiProvider.get();
-    const mindMap=modeStart?null:(globalThis.getDragonMindMapContext?.(text)||null),mapKey=JSON.stringify(mindMap);
-    const attachment=modeStart?null:attachedPdf, memoryId=modeStart?null:(selectedMemory?.id||null);
+    if(!session){await sendTrial(modeStart,deepAction);return;}
+    const sentDraft=input.value, text=modeStart?'':deepAction==='finish'?DEEP_FINISH_MESSAGE:(sentDraft.trim() || '添付したPDFの内容を要約してください。'), version=epoch, replyVersion=++responseVersion,provider=aiProvider.get();
+    const mindMap=controlTurn?null:(globalThis.getDragonMindMapContext?.(text)||null),mapKey=JSON.stringify(mindMap);
+    const attachment=controlTurn?null:attachedPdf, memoryId=controlTurn?null:(selectedMemory?.id||null);
     if(attachment && `${text}\n\n［添付PDF：${attachment.name}］`.length>4000)throw new Error('PDFのファイル名を含めて4,000文字以内になるよう、質問を短くしてください。');
     if(text.length>4000)throw new Error('メッセージは4,000文字以内で入力してください。');
     if(!activeId){
       const id=crypto.randomUUID();
-      const {error}=await db.from('conversations').insert({id,title:modeStart?(directionExploration?'方角を見る':patternExploration?'パターンを見る':deepExploration?'深く降りる':'自分に戻る'):text.slice(0,80),user_id:session.user.id});
+      const {error}=await db.from('conversations').insert({id,title:modeStart?(directionExploration?'方角を見る':patternExploration?'パターンを見る':deepExploration?('深く降りる'+(deepTheme?'：'+deepTheme:'')).slice(0,80):'自分に戻る'):text.slice(0,80),user_id:session.user.id});
       if(error)throw new Error('会話を作成できませんでした。もう一度お試しください。');
       if(version!==epoch||replyVersion!==responseVersion)return;
       activeId=id;rememberDraft();
     }
-    if(!pending||pending.provider!==provider||pending.text!==text||pending.conversationId!==activeId||pending.pdfId!==attachment?.id||pending.seikanMode!==seikanMode||pending.blindSpot!==blindSpot||pending.emotionFocus!==emotionFocus||pending.encouragement!==encouragement||pending.returnPath!==returnPath||pending.skyGazing!==skyGazing||pending.selfReturn!==selfReturn||pending.deepExploration!==deepExploration||pending.patternExploration!==patternExploration||pending.directionExploration!==directionExploration||pending.modeStart!==modeStart||pending.memoryId!==memoryId||pending.mapKey!==mapKey)pending={provider,requestId:crypto.randomUUID(),conversationId:activeId,text,pdfId:attachment?.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,memoryId,mapKey};
+    if(!pending||pending.provider!==provider||pending.text!==text||pending.conversationId!==activeId||pending.pdfId!==attachment?.id||pending.seikanMode!==seikanMode||pending.blindSpot!==blindSpot||pending.emotionFocus!==emotionFocus||pending.encouragement!==encouragement||pending.returnPath!==returnPath||pending.skyGazing!==skyGazing||pending.selfReturn!==selfReturn||pending.deepExploration!==deepExploration||pending.deepTheme!==deepTheme||pending.deepAction!==deepAction||pending.patternExploration!==patternExploration||pending.directionExploration!==directionExploration||pending.modeStart!==modeStart||pending.memoryId!==memoryId||pending.mapKey!==mapKey)pending={provider,requestId:crypto.randomUUID(),conversationId:activeId,text,pdfId:attachment?.id,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,deepTheme,deepAction,patternExploration,directionExploration,modeStart,memoryId,mapKey};
     rememberDraft();status(aiProvider.label()+'が返答を考えています…');replyWaiting(true);
     const {data:{session:fresh},error:authError}=await db.auth.getSession();
     if(version!==epoch||replyVersion!==responseVersion)return;
     if(authError||!fresh)throw new Error('ログインし直してください。');
-    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${fresh.access_token}`},body:JSON.stringify({provider,message:text,conversationId:activeId,requestId:pending.requestId,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,patternExploration,directionExploration,modeStart,mindMap,...(memoryId?{memoryId}:{}),...(attachment?{attachment:{name:attachment.name,mimeType:'application/pdf',data:attachment.data}}:{})}),signal:AbortSignal.timeout(85000)});
+    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${fresh.access_token}`},body:JSON.stringify({provider,message:text,conversationId:activeId,requestId:pending.requestId,seikanMode,blindSpot,emotionFocus,encouragement,returnPath,skyGazing,selfReturn,deepExploration,...(deepExploration?{deepTheme,...(deepAction?{deepAction}:{})}:{}),patternExploration,directionExploration,modeStart,mindMap,...(memoryId?{memoryId}:{}),...(attachment?{attachment:{name:attachment.name,mimeType:'application/pdf',data:attachment.data}}:{})}),signal:AbortSignal.timeout(85000)});
     const data=await response.json().catch(()=>({}));
     if(version!==epoch||replyVersion!==responseVersion)return;
     if(!response.ok) {
@@ -506,7 +540,9 @@ function submitMessage(modeStart=false){
     if(!data.saved)throw new Error('保存を確認できませんでした。もう一度お試しください。');
     if(version!==epoch||replyVersion!==responseVersion)return;
     if(data.usage||data.provider||data.replySource)usageCache.set(pending.requestId,{...data.usage,provider:data.usage?.provider||data.provider,model:data.usage?.model||data.model,replySource:data.replySource||data.usage?.replySource});
-    encouragement=false;blindSpot=false;returnPath=false;if(!modeStart){if(input.value===sentDraft)input.value='';clearRecall();}pending=null;rememberDraft();status('保存しました');
+    encouragement=false;blindSpot=false;returnPath=false;if(!controlTurn){if(input.value===sentDraft)input.value='';clearRecall();}pending=null;
+    if(deepAction==='finish')leaveSelfReturn();
+    rememberDraft();status(deepAction==='finish'?'振り返りを会話に残しました。言葉が違うところは、続けて直せます。':'保存しました');
     await loadMessages();await loadHistory();
   });
 }
@@ -538,7 +574,7 @@ $('pdfInput').addEventListener('change',async()=>{
   finally{if(version===pdfVersion){pdfReading=false;$('pdfInput').value='';controls();}}
 });
 // Enter inserts a newline; sending is an explicit button action.
-$('newChat').onclick=()=>{if(busy)return;document.dispatchEvent(new Event('dragon-chat-change'));clearRecall();leaveSelfReturn();encouragement=false;blindSpot=false;emotionFocus=false;returnPath=false;skyGazing=false;clearPdf();activeId=null;rows=[];pending=null;input.value='';olderMore=false;rememberDraft();renderMessages();renderHistory();status('');toggleSidebar(false);input.focus();};
+$('newChat').onclick=()=>{if(busy)return;document.dispatchEvent(new Event('dragon-chat-change'));clearRecall();leaveSelfReturn();encouragement=false;blindSpot=false;emotionFocus=false;returnPath=false;skyGazing=false;clearPdf();activeId=null;rows=[];pending=null;input.value='';olderMore=false;rememberDraft();renderMessages();renderHistory();controls();status('');toggleSidebar(false);input.focus();};
 let rememberedConversation=null;
 $('rememberChat').onclick=()=>run(async()=>{
   if(!activeId||!session||session.user.is_anonymous)return;
