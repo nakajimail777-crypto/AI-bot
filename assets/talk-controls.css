@@ -1,10 +1,11 @@
 /* Keep every reply style visible, with descriptions in the separate dialog. */
+.talk-toolbar { width: min(100%, 760px); margin: 0 auto 8px; }
 .talk-shortcuts {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 6px;
   width: min(100%, 760px);
-  margin: 0 auto 8px;
+  margin: 8px auto 0;
 }
 .talk-shortcuts button {
   position: relative;
