@@ -110,3 +110,18 @@ test('deep exploration invites the user’s feeling before offering examples', (
   assert.match(open, /「悔しい」など自分の言葉で答えたら、その言葉をそのまま受け止め、候補へ当てはめない/);
   assert.doesNotMatch(deepInstructions(false, false), /まず候補なしで|この中になければ/);
 });
+
+test('a boundary-only turn is acknowledged without asking whether to continue', () => {
+  const instructions = deepInstructions(true, false);
+  assert.match(instructions, /避けたいという意思表示だけなら、短く了承/);
+  assert.match(instructions, /別の話題や続けるかどうかを尋ねずに止まる/);
+  assert.match(instructions, /続けたい方向や具体的な依頼が明示されている場合だけ、その希望に応じる/);
+  assert.doesNotMatch(deepInstructions(false, false), /避けたいという意思表示だけなら/);
+});
+
+test('an expressed hope is not an invitation to list solutions', () => {
+  const instructions = deepInstructions(true, false);
+  assert.match(instructions, /「次に活かしたい」.*提案の依頼と解釈せず/);
+  assert.match(instructions, /「一つだけ」なら案も一つに絞り/);
+  assert.doesNotMatch(deepInstructions(false, false), /提案の依頼と解釈せず/);
+});
