@@ -1,0 +1,167 @@
+/* Keep the composer compact; choose a reply style in its own dialog. */
+.composer-actions {
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.composer-actions .send-button,
+.composer-actions .attach-button {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+}
+.composer-actions .send-button { margin-left: auto; }
+#talkToggle {
+  min-height: 44px;
+  padding: 9px 13px;
+  border: 1px solid #667b6d;
+  border-radius: 11px;
+  background: #34453b;
+  color: #edf5ef;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#talkToggle:hover { background: #405647; }
+#talkActive {
+  display: block;
+  margin: 6px 4px 0;
+  color: #bed4c5;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+#talkActive[hidden] { display: none; }
+
+#talkPanel {
+  box-sizing: border-box;
+  width: min(680px, calc(100vw - 24px));
+  max-width: none;
+  max-height: min(calc(100dvh - 24px), 680px);
+  margin: auto;
+  padding: 20px;
+  border: 1px solid #617267;
+  border-radius: 20px;
+  background: #252b27;
+  color: #f0f4f1;
+  box-shadow: 0 24px 80px #0009;
+  overflow: hidden;
+}
+#talkPanel[open] { display: flex; flex-direction: column; }
+#talkPanel::backdrop { background: #000a; }
+#talkPanel .talk-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+#talkPanel .talk-heading {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #252b27;
+}
+#talkTitle { margin: 0; font-size: 19px; line-height: 1.5; }
+#talkClose {
+  min-height: 44px;
+  flex: 0 0 auto;
+  border-color: #617267;
+  background: transparent;
+  font-size: 13px;
+}
+#talkPanel .talk-intro {
+  flex: 0 0 auto;
+  margin: 10px 0 16px;
+  color: #becbc2;
+  font-size: 13px;
+  line-height: 1.7;
+}
+#talkPanel .talk-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-height: 0;
+  padding: 3px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  align-content: start;
+}
+#talkPanel .talk-option {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #46584b;
+  border-radius: 14px;
+  background: #2d3630;
+}
+#talkPanel .talk-option:has([aria-pressed="true"]) {
+  border-color: #abcdb6;
+  background: #354a3d;
+}
+#talkPanel .talk-option .plain-button {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#talkPanel .talk-option p {
+  margin: 7px 0 5px;
+  color: #d1dbd4;
+  font-size: 13px;
+  line-height: 1.5;
+}
+#talkPanel .talk-option small {
+  display: block;
+  color: #b4c4b9;
+  font-size: 12px;
+  line-height: 1.6;
+}
+#talkPanel button:focus-visible,
+#talkToggle:focus-visible,
+.composer-actions .attach-button:focus-visible,
+.composer-actions .send-button:focus-visible {
+  outline: 2px solid #d2eddb;
+  outline-offset: 3px;
+}
+.menu-label {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border: 1px solid #59675f;
+  border-radius: 6px;
+  color: #c3d5c9;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+@media (max-width: 540px) {
+  #talkPanel {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    padding: 10px;
+    border-radius: 17px;
+  }
+  #talkPanel .talk-grid { gap: 6px; }
+  #talkPanel .talk-intro { margin: 6px 0 8px; font-size: 12px; }
+  #talkPanel .talk-option { padding: 7px; border-radius: 11px; }
+  #talkPanel .talk-option .plain-button { padding: 6px; font-size: 12px; }
+  #talkPanel .talk-option p, #talkPanel .talk-option small { font-size: 12px; }
+  .composer-actions { gap: 6px; }
+  #talkActive { margin-top: 4px; }
+  .exploration-menu { max-width: calc(100% - 52px); }
+  .exploration-menu > .model-button { min-width: 0; max-width: 100%; gap: 6px; }
+  .exploration-menu > .model-button > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
