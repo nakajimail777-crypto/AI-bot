@@ -1,5 +1,12 @@
 /* Keep every reply style visible, with descriptions in the separate dialog. */
-.talk-toolbar { width: min(100%, 760px); margin: 0 auto 8px; }
+.chat-navigation {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+.chat-navigation > :is(.mobile-menu, #talkToggle) { flex: none; }
 .talk-shortcuts {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -211,7 +218,6 @@
   #talkPanel .talk-option p, #talkPanel .talk-option small { font-size: 12px; }
   .composer-actions { gap: 6px; }
   #talkActive { margin-top: 4px; }
-  .exploration-menu { max-width: calc(100% - 52px); }
   .exploration-menu > .model-button { min-width: 0; max-width: 100%; gap: 6px; }
   .exploration-menu > .model-button > span:first-child {
     min-width: 0;

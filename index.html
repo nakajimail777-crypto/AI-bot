@@ -430,6 +430,7 @@
 
     <main class="main">
       <header class="topbar">
+        <div class="chat-navigation">
         <button class="icon-button mobile-menu" id="openSidebar" type="button" aria-label="履歴を開く">
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
@@ -440,7 +441,7 @@
         </summary>
         <details class="self-exploration" id="selfExploration" open>
           <summary><span>自己探索<small>何を一緒に進めたいですか？</small></span></summary>
-          <button id="openGuide" type="button">迷ったらここから <span aria-hidden="true">→</span></button><p class="menu-purpose">ここでは、取り組みたいことを選びます。返答の雰囲気は、入力欄の「話し方を選ぶ」から変えられます。</p><h2 class="menu-group-title">話しながら探る</h2><p class="menu-group-intro">AIとの会話で、今の自分を少しずつ確かめる</p><div class="exploration-routes" role="group" aria-label="自己探索のルート" aria-describedby="explorationNotice">
+          <button id="openGuide" type="button">迷ったらここから <span aria-hidden="true">→</span></button><p class="menu-purpose">ここでは、取り組みたいことを選びます。返答の雰囲気は、画面上部の「話し方を選ぶ」から変えられます。</p><h2 class="menu-group-title">話しながら探る</h2><p class="menu-group-intro">AIとの会話で、今の自分を少しずつ確かめる</p><div class="exploration-routes" role="group" aria-label="自己探索のルート" aria-describedby="explorationNotice">
             <!-- Optional exploration routes share the existing conversation. -->
             <button type="button" class="plain-button exploration-route" id="deepExploration" aria-pressed="false" data-exploration-route="deep"><span>深く降りる</span><small>テーマから、今の気持ちを探りたいとき</small></button>
             <button type="button" class="plain-button exploration-route" id="patternExploration" aria-pressed="false" data-exploration-route="pattern"><span>パターンを見る</span><small>繰り返す反応や、避けがちな場面を確かめたいとき</small></button>
@@ -467,6 +468,8 @@
 
         </details>
         </details>
+          <button type="button" class="plain-button" id="talkToggle" aria-haspopup="dialog" aria-expanded="false" aria-controls="talkPanel" aria-describedby="talkActive">話し方を選ぶ <span aria-hidden="true">⌄</span></button>
+        </div>
         <button id="rememberChat" class="plain-button chat-actions" type="button" title="この会話全体を記憶に保存" hidden>会話を覚える</button>
         <button id="copyChat" class="plain-button" type="button" hidden>会話をコピー</button>
         <button id="deleteChat" class="plain-button" type="button" hidden>会話を削除</button>
@@ -494,7 +497,6 @@
           <p>選んだ言葉は入力欄に入ります。直して送れます。</p>
         </section>
         <div id="trialBanner" class="trial-banner" hidden><span id="trialCount">ログインなしで5往復お試しできます。</span><button id="trialLogin" class="plain-button" type="button">ログイン</button><small>体験の会話はこのブラウザで30日間表示できます。ログイン後の保存履歴には引き継がれません。PDF添付はログイン後に使えます。</small></div>
-        <div class="talk-toolbar"><button type="button" class="plain-button" id="talkToggle" aria-haspopup="dialog" aria-expanded="false" aria-controls="talkPanel" aria-describedby="talkActive">話し方を選ぶ <span aria-hidden="true">⌄</span></button></div>
         <form class="composer" id="composer">
           <input id="pdfInput" type="file" accept=".pdf,application/pdf" hidden>
           <div id="pdfAttachment" class="pdf-attachment" hidden>
