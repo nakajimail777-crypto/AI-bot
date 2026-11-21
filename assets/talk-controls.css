@@ -8,6 +8,10 @@
 }
 .talk-shortcuts button {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   min-width: 0;
   min-height: 44px;
   padding: 7px 6px;
@@ -19,6 +23,7 @@
   line-height: 1.5;
   cursor: pointer;
 }
+.talk-shortcut-icon { flex: 0 0 auto; font-size: 16px; line-height: 1; }
 .talk-shortcuts button:hover:not(:disabled) { background: #354139; }
 .talk-shortcuts button[aria-pressed="true"] {
   border-color: #a7d0b7;
