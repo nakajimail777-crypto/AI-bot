@@ -25,6 +25,7 @@
   cursor: pointer;
 }
 .talk-shortcut-icon { flex: 0 0 auto; font-size: 16px; line-height: 1; }
+.talk-shortcut-label > span { display: inline-block; }
 .talk-shortcuts button:hover:not(:disabled) { background: #354139; }
 .talk-shortcuts button[aria-pressed="true"] {
   border-color: #a7d0b7;
@@ -57,6 +58,14 @@
   flex: 0 0 44px;
 }
 .composer-actions .send-button { margin-left: auto; }
+.composer-actions .talk-shortcuts { flex: 1 1 0; min-width: 0; width: auto; margin: 0; }
+@media (min-width: 761px) and (max-width: 1100px) {
+  .composer-actions .talk-shortcuts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .composer-actions .talk-shortcuts { flex-basis: calc(100% - 52px); }
+  .composer-actions .attach-button { align-self: flex-start; }
+}
 #talkToggle {
   min-height: 44px;
   padding: 9px 13px;

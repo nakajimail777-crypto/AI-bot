@@ -511,6 +511,14 @@
             <button id="attachPdf" class="attach-button" type="button" aria-label="PDFを添付（3MBまで）" title="PDFを添付（1ファイル・3MBまで）" disabled>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
             </button>
+        <div class="talk-shortcuts" role="group" aria-label="話し方の一覧">
+          <button type="button" data-talk-shortcut="seikanMode" aria-pressed="false" aria-describedby="seikanModeDescription seikanModeDuration" disabled aria-label="静観モード"><span class="talk-shortcut-icon" aria-hidden="true">🌿</span><span class="talk-shortcut-label"><span>静観</span><span>モード</span></span></button>
+          <button type="button" data-talk-shortcut="emotionFocus" aria-pressed="false" aria-describedby="emotionFocusDescription emotionFocusDuration" disabled aria-label="感情を感じきる"><span class="talk-shortcut-icon" aria-hidden="true">🌊</span><span class="talk-shortcut-label"><span>感情を</span><span>感じきる</span></span></button>
+          <button type="button" data-talk-shortcut="returnPath" aria-pressed="false" aria-describedby="returnPathDescription returnPathDuration" disabled aria-label="戻れる逃げ道"><span class="talk-shortcut-icon" aria-hidden="true">↩</span><span class="talk-shortcut-label"><span>戻れる</span><span>逃げ道</span></span></button>
+          <button type="button" data-talk-shortcut="selfReturn" aria-pressed="false" aria-describedby="selfReturnDescription selfReturnDuration" title="ONにするとAIが話しかけます" disabled aria-label="自分に戻る"><span class="talk-shortcut-icon" aria-hidden="true">🧭</span><span class="talk-shortcut-label"><span>自分に</span><span>戻る</span></span></button>
+          <button type="button" data-talk-shortcut="skyGazing" aria-pressed="false" aria-describedby="skyGazingDescription skyGazingDuration" disabled aria-label="空を眺める"><span class="talk-shortcut-icon" aria-hidden="true">🌙</span><span class="talk-shortcut-label"><span>空を</span><span>眺める</span></span></button>
+          <button type="button" data-talk-shortcut="blindSpot" aria-pressed="false" aria-describedby="blindSpotDescription blindSpotDuration" disabled aria-label="盲点を照らす"><span class="talk-shortcut-icon" aria-hidden="true">🔦</span><span class="talk-shortcut-label"><span>盲点を</span><span>照らす</span></span></button>
+        </div>
             <button id="encouragement" class="plain-button blind-spot" type="button" aria-pressed="false" aria-describedby="encouragementHint" hidden>少し強めに背中を押してもらう</button>
             <button class="send-button" id="sendButton" type="submit" disabled aria-label="送信">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 12 6-6 6 6M12 6v12"/></svg>
@@ -518,14 +526,7 @@
           </div>
           <p id="talkActive" class="talk-active" aria-live="polite" hidden></p>
         </form>
-        <div class="talk-shortcuts" role="group" aria-label="話し方の一覧">
-          <button type="button" data-talk-shortcut="seikanMode" aria-pressed="false" aria-describedby="seikanModeDescription seikanModeDuration" disabled><span class="talk-shortcut-icon" aria-hidden="true">🌿</span><span>静観モード</span></button>
-          <button type="button" data-talk-shortcut="emotionFocus" aria-pressed="false" aria-describedby="emotionFocusDescription emotionFocusDuration" disabled><span class="talk-shortcut-icon" aria-hidden="true">🌊</span><span>感情を感じきる</span></button>
-          <button type="button" data-talk-shortcut="returnPath" aria-pressed="false" aria-describedby="returnPathDescription returnPathDuration" disabled><span class="talk-shortcut-icon" aria-hidden="true">↩</span><span>戻れる逃げ道</span></button>
-          <button type="button" data-talk-shortcut="selfReturn" aria-pressed="false" aria-describedby="selfReturnDescription selfReturnDuration" title="ONにするとAIが話しかけます" disabled><span class="talk-shortcut-icon" aria-hidden="true">🧭</span><span>自分に戻る</span></button>
-          <button type="button" data-talk-shortcut="skyGazing" aria-pressed="false" aria-describedby="skyGazingDescription skyGazingDuration" disabled><span class="talk-shortcut-icon" aria-hidden="true">🌙</span><span>空を眺める</span></button>
-          <button type="button" data-talk-shortcut="blindSpot" aria-pressed="false" aria-describedby="blindSpotDescription blindSpotDuration" disabled><span class="talk-shortcut-icon" aria-hidden="true">🔦</span><span>盲点を照らす</span></button>
-        </div>
+
         <dialog id="talkPanel" class="talk-panel" aria-labelledby="talkTitle" aria-describedby="talkIntro">
           <div class="talk-heading"><h2 id="talkTitle">話し方を選ぶ</h2><button type="button" class="plain-button" id="talkClose" aria-label="話し方を閉じる" autofocus>閉じる ×</button></div>
           <div class="talk-body">
