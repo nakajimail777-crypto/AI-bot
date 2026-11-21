@@ -1,4 +1,44 @@
-/* Keep the composer compact; choose a reply style in its own dialog. */
+/* Keep every reply style visible, with descriptions in the separate dialog. */
+.talk-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  width: min(100%, 760px);
+  margin: 0 auto 8px;
+}
+.talk-shortcuts button {
+  position: relative;
+  min-width: 0;
+  min-height: 44px;
+  padding: 7px 6px;
+  border: 1px solid #4d5951;
+  border-radius: 10px;
+  background: #282e2a;
+  color: #dce5df;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.talk-shortcuts button:hover:not(:disabled) { background: #354139; }
+.talk-shortcuts button[aria-pressed="true"] {
+  border-color: #a7d0b7;
+  background: #3d5b48;
+  color: #f2fff6;
+}
+.talk-shortcuts button[aria-pressed="true"]::after {
+  content: '✓';
+  position: absolute;
+  top: 0;
+  right: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.talk-shortcuts button:disabled { opacity: .5; cursor: default; }
+.talk-shortcuts button:focus-visible { outline: 2px solid #d2eddb; outline-offset: 2px; }
+@media (max-width: 760px) {
+  .talk-shortcuts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .talk-shortcuts button { font-size: 13px; }
+}
 .composer-actions {
   justify-content: flex-start;
   gap: 8px;

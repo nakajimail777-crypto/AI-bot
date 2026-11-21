@@ -10,6 +10,13 @@
   const toggle = document.getElementById('talkToggle');
   const panel = document.getElementById('talkPanel');
   const summary = document.getElementById('talkActive');
+  const shortcuts = [...document.querySelectorAll('[data-talk-shortcut]')];
+
+  // Reuse the existing mode handlers so both entry points share all behavior.
+  shortcuts.forEach(button => button.addEventListener('click', () => {
+    const source = document.getElementById(button.dataset.talkShortcut);
+    if (!source.disabled) source.click();
+  }));
 
   toggle.addEventListener('click', () => {
     if (panel.open) return;
@@ -29,6 +36,11 @@
   });
 
   function sync() {
+    shortcuts.forEach(button => {
+      const source = document.getElementById(button.dataset.talkShortcut);
+      button.setAttribute('aria-pressed', source.getAttribute('aria-pressed'));
+      button.disabled = source.disabled;
+    });
     const active = modes
       .filter(([id]) => document.getElementById(id).getAttribute('aria-pressed') === 'true')
       .map(([, name]) => name);
@@ -38,7 +50,7 @@
   }
   const observer = new MutationObserver(sync);
   modes.forEach(([id]) => observer.observe(document.getElementById(id), {
-    attributes: true, attributeFilter: ['aria-pressed'],
+    attributes: true, attributeFilter: ['aria-pressed', 'disabled'],
   }));
   sync();
 })();

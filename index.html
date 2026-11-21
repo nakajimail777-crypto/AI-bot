@@ -494,6 +494,14 @@
           <p>選んだ言葉は入力欄に入ります。直して送れます。</p>
         </section>
         <div id="trialBanner" class="trial-banner" hidden><span id="trialCount">ログインなしで5往復お試しできます。</span><button id="trialLogin" class="plain-button" type="button">ログイン</button><small>体験の会話はこのブラウザで30日間表示できます。ログイン後の保存履歴には引き継がれません。PDF添付はログイン後に使えます。</small></div>
+        <div class="talk-shortcuts" role="group" aria-label="話し方の一覧">
+          <button type="button" data-talk-shortcut="seikanMode" aria-pressed="false" aria-describedby="seikanModeDescription seikanModeDuration" disabled>静観モード</button>
+          <button type="button" data-talk-shortcut="emotionFocus" aria-pressed="false" aria-describedby="emotionFocusDescription emotionFocusDuration" disabled>感情を感じきる</button>
+          <button type="button" data-talk-shortcut="returnPath" aria-pressed="false" aria-describedby="returnPathDescription returnPathDuration" disabled>戻れる逃げ道</button>
+          <button type="button" data-talk-shortcut="selfReturn" aria-pressed="false" aria-describedby="selfReturnDescription selfReturnDuration" title="ONにするとAIが話しかけます" disabled>自分に戻る</button>
+          <button type="button" data-talk-shortcut="skyGazing" aria-pressed="false" aria-describedby="skyGazingDescription skyGazingDuration" disabled>空を眺める</button>
+          <button type="button" data-talk-shortcut="blindSpot" aria-pressed="false" aria-describedby="blindSpotDescription blindSpotDuration" disabled>盲点を照らす</button>
+        </div>
         <form class="composer" id="composer">
           <input id="pdfInput" type="file" accept=".pdf,application/pdf" hidden>
           <div id="pdfAttachment" class="pdf-attachment" hidden>
