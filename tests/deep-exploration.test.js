@@ -100,3 +100,13 @@ test('current-topic entry keeps its preceding scene as background, not a confirm
   assert.ok(!instructions.includes(history[1].content));
   assert.deepEqual(deepSummaryRange(history.slice(0, 2)), { startIndex: -1, messageCount: 2, currentTopic: false });
 });
+
+test('deep exploration invites the user’s feeling before offering examples', () => {
+  const open = deepInstructions(true, false);
+  assert.match(open, /まず候補なしで/);
+  assert.match(open, /本人が言葉の例を求めたときだけ/);
+  assert.match(open, /この中になければ、自分の言葉で大丈夫です/);
+  assert.match(open, /「まだ分からない」だけなら候補を重ねない/);
+  assert.match(open, /「悔しい」など自分の言葉で答えたら、その言葉をそのまま受け止め、候補へ当てはめない/);
+  assert.doesNotMatch(deepInstructions(false, false), /まず候補なしで|この中になければ/);
+});
