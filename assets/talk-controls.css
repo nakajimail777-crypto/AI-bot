@@ -70,8 +70,30 @@
   .composer-actions .talk-shortcuts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
-  .composer-actions .talk-shortcuts { flex-basis: calc(100% - 52px); }
-  .composer-actions .attach-button { align-self: flex-start; }
+  .composer-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    align-items: stretch;
+  }
+  .composer-actions .talk-shortcuts { display: contents; }
+  .composer-actions .talk-shortcuts button {
+    min-height: 48px;
+    flex-direction: column;
+    gap: 2px;
+    padding: 3px 2px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+  .composer-actions :is(.attach-button, .send-button) {
+    align-self: center;
+    justify-self: center;
+    margin: 0;
+  }
+  .composer-actions .send-button { grid-column: 4; grid-row: 2; }
+  .composer-actions #encouragement { grid-column: 1 / 4; grid-row: 3; }
+  .composer-actions:has(#encouragement:not([hidden])) .send-button { grid-row: 3; }
 }
 #talkToggle {
   min-height: 44px;
@@ -216,7 +238,6 @@
   #talkPanel .talk-option { padding: 7px; border-radius: 11px; }
   #talkPanel .talk-option .plain-button { padding: 6px; font-size: 12px; }
   #talkPanel .talk-option p, #talkPanel .talk-option small { font-size: 12px; }
-  .composer-actions { gap: 6px; }
   #talkActive { margin-top: 4px; }
   .exploration-menu > .model-button { min-width: 0; max-width: 100%; gap: 6px; }
   .exploration-menu > .model-button > span:first-child {
